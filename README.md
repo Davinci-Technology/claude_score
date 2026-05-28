@@ -20,6 +20,19 @@ to `~/.claude/projects/`, so there's nothing to install on the candidate's
 session and nothing to configure mid-interview. Remote Control and Dispatch
 sessions land in the same place, so they're covered too.
 
+## Standing up an interview box
+
+If you're setting up a dedicated device to host candidate interviews, this repo
+is the whole context — clone it on the box, open `claude` inside it, and Claude
+auto-loads [`CLAUDE.md`](CLAUDE.md) and follows the runbook. Three files do all
+the work:
+
+- [`CLAUDE.md`](CLAUDE.md) — operator-facing context loaded automatically by Claude Code.
+- [`docs/SETUP.md`](docs/SETUP.md) — first-time setup of the box (Python, Claude Code, ClaudeScore, env lockdown, **isolated `CLAUDE_CONFIG_DIR` so the operator's account history never leaks**).
+- [`docs/INTERVIEW_DAY.md`](docs/INTERVIEW_DAY.md) — per-candidate runbook.
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — common issues + fixes.
+- [`scripts/setup-windows.ps1`](scripts/setup-windows.ps1) — automated Windows setup.
+
 ## Why this works
 
 Every Claude Code session writes a complete JSONL transcript. Each line carries

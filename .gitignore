@@ -7,8 +7,9 @@ dist/
 .venv/
 venv/
 
-# Generated reports / scorecards
-*.html
-*.md
-!README.md
-!ROADMAP.md
+# Generated reports / scorecards (root-level outputs from `analyze --html/--md`)
+/*.html
+/*.md
+!/README.md
+!/ROADMAP.md
+!/CLAUDE.md

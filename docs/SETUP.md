@@ -39,7 +39,7 @@ claude
 ```powershell
 New-Item -ItemType Directory -Path "$HOME\code" -Force | Out-Null
 cd $HOME\code
-git clone https://github.com/alisalmani-davinci/claude_score.git
+git clone https://github.com/Davinci-Technology/claude_score.git
 cd claude_score
 ```
 

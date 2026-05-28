@@ -52,7 +52,7 @@ if (Test-Path (Join-Path $repoDir ".git")) {
     git pull --ff-only
     Pop-Location
 } else {
-    git clone https://github.com/alisalmani-davinci/claude_score.git $repoDir
+    git clone https://github.com/Davinci-Technology/claude_score.git $repoDir
 }
 
 Write-Host "`n=== 4. Creating venv and installing ===" -ForegroundColor Cyan

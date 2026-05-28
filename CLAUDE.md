@@ -6,7 +6,7 @@ You are running on a dedicated device whose only job is to host coding interview
 
 This box is the **ClaudeScore interview station**. Candidates sit at it during a hiring interview, run `claude` from a per-candidate working directory, and solve a coding problem using only the Claude CLI. After the interview, ClaudeScore parses their session transcript and produces a scorecard.
 
-(You are running inside the ClaudeScore repo itself — <https://github.com/alisalmani-davinci/claude_score>. If you are a developer working on the package rather than an operator setting up the box, see `README.md` and `ROADMAP.md` instead.)
+(You are running inside the ClaudeScore repo itself — <https://github.com/Davinci-Technology/claude_score>. If you are a developer working on the package rather than an operator setting up the box, see `README.md` and `ROADMAP.md` instead.)
 
 ## What you will be asked to do
 

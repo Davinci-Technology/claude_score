@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude_score"
+version = "0.1.0"
+description = "Sense how a developer collaborates with Claude Code — metrics, badges, and an optional LLM-judged scorecard from session transcripts."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+judge = ["anthropic>=0.40"]
+dev = ["pytest>=7"]
+
+[project.scripts]
+claude_score = "claude_score.cli:main"
+
+[tool.setuptools]
+packages = ["claude_score"]
+
+[tool.setuptools.package-data]
+claude_score = ["templates/*.j2"]

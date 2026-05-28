@@ -1,0 +1,8 @@
+# Core (required)
+jinja2>=3.1
+
+# Optional: enables the LLM judge pass (claude_score analyze --judge)
+# anthropic>=0.40
+
+# Optional: tests
+# pytest>=7

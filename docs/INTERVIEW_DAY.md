@@ -102,4 +102,6 @@ Also fine. `/clear` ends one session and starts another — both transcripts are
 
 ## What to do if a candidate runs `claude` from the wrong directory
 
-Tell them to exit and `cd` into the candidate folder before running `claude` again. If they don't, `interview finish` will report `No Claude Code transcripts found whose cwd matches <candidate-dir>` — you can manually move their transcript files into the candidate folder's `transcripts/` directory and re-run `finish`.
+Sessions started from the candidate folder **or any subfolder of it** (e.g. `.../jane-doe/backend`) are gathered automatically — `finish` matches on each session's recorded working directory, not just an exact path, so they all aggregate as one candidate.
+
+Only a session started entirely **outside** the candidate folder is missed. If that happens, `finish` records a `transcript_warning` on the manifest ("No transcript folder … matched cwd=… or any subfolder"). Tell the candidate to exit and `cd` into the candidate folder before running `claude` again, or manually copy their transcript JSONLs into the candidate folder's `transcripts/` directory and re-run `finish`.

@@ -93,6 +93,10 @@ def _print_summary(candidate, metrics, badges, judge_result) -> None:
     _emit(f"  cache reuse     {metrics.cache_hit_ratio:.0%}")
     _emit(f"  avg prompt      {metrics.mean_prompt_words:.0f} words")
     _emit(f"  corrections     {metrics.correction_rate:.0%} of prompts")
+    if metrics.rewind_count or metrics.slash_command_count:
+        _emit(f"  rewinds         {metrics.rewind_count}  "
+              f"({metrics.rewound_prompt_count} prompt(s) redone)")
+        _emit(f"  slash commands  {metrics.slash_command_count}")
     _emit(f"  politeness      {metrics.politeness_score:+.2f}")
     if metrics.tool_breakdown:
         top = ", ".join(f"{n}×{c}" for n, c in list(metrics.tool_breakdown.items())[:5])

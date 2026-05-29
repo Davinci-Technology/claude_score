@@ -120,6 +120,19 @@
   </div>
   {% endif %}
 
+  {% if commands %}
+  <h2>Slash commands</h2>
+  <div class="card">
+    {% for c in commands %}
+    <div class="toolrow">
+      <div class="n">{{ c.name }}</div>
+      <div class="bar"><span style="width: {{ c.pct }}%"></span></div>
+      <div class="num">{{ c.count }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <h2>Prompt replay <span class="note">({{ replay|length }} prompts)</span></h2>
   <div class="card replay">
     {% for r in replay %}

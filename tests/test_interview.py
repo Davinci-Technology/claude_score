@@ -55,7 +55,7 @@ def test_start_seeds_problem_files(tmp_path: Path):
 
 
 def _synthetic_transcript(cwd: Path) -> str:
-    """Minimal valid JSONL that ``_find_project_for_cwd`` will match on."""
+    """Minimal valid JSONL that ``_transcripts_under_cwd`` will match on."""
     cwd_str = str(cwd).replace("\\", "\\\\")
     return "\n".join([
         json.dumps({
@@ -111,6 +111,43 @@ def test_finish_end_to_end(tmp_path: Path, monkeypatch):
     if shutil.which("git"):
         assert (sealed / "solution.patch").exists()
         assert (sealed / "git.log").exists()
+
+
+def test_finish_aggregates_sessions_from_subdirectories(tmp_path: Path, monkeypatch):
+    """Sessions started from a subfolder of the candidate dir land in a separate
+    project dir; finish should still gather them as the same candidate."""
+    fake_home = tmp_path / "home"
+    (fake_home / "projects").mkdir(parents=True)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(fake_home))
+
+    root = tmp_path / "interviews"
+    candidate_dir = interview.start("Dana Kim", root=root)
+
+    # Session 1: ran in the candidate folder itself.
+    top = fake_home / "projects" / "proj-top"
+    top.mkdir(parents=True)
+    (top / "s1.jsonl").write_text(_synthetic_transcript(candidate_dir), encoding="utf-8")
+
+    # Session 2: ran in a subfolder — a different munged project dir.
+    sub = fake_home / "projects" / "proj-sub"
+    sub.mkdir(parents=True)
+    (sub / "s2.jsonl").write_text(
+        _synthetic_transcript(candidate_dir / "backend"), encoding="utf-8"
+    )
+
+    # An unrelated session elsewhere on the box must NOT be swept in.
+    other = fake_home / "projects" / "proj-other"
+    other.mkdir(parents=True)
+    (other / "s3.jsonl").write_text(
+        _synthetic_transcript(tmp_path / "somewhere-else"), encoding="utf-8"
+    )
+
+    sealed = interview.finish("Dana Kim", root=root)
+    copied = sorted(p.name for p in (sealed / "transcripts").glob("*.jsonl"))
+    assert copied == ["s1.jsonl", "s2.jsonl"]
+
+    manifest = json.loads((sealed / interview.MANIFEST).read_text("utf-8"))
+    assert len(manifest["project_dirs"]) == 2
 
 
 def test_finish_records_warning_when_no_transcript(tmp_path: Path, monkeypatch):

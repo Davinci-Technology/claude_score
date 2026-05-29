@@ -45,6 +45,8 @@ def build_context(
         ("Prompts", str(metrics.prompt_count)),
         ("Assistant turns", str(metrics.assistant_turn_count)),
         ("Tool calls", str(metrics.tool_call_count)),
+        ("Slash commands", str(metrics.slash_command_count)),
+        ("Rewinds", str(metrics.rewind_count)),
         ("Work tokens", f"{metrics.work_tokens:,}"),
         ("Output tokens", f"{metrics.usage.output_tokens:,}"),
         ("Est. cost (USD)", f"${metrics.estimated_cost_usd:.2f}"),
@@ -62,6 +64,12 @@ def build_context(
     tools = [
         {"name": name, "count": count, "pct": round(100 * count / tool_total)}
         for name, count in metrics.tool_breakdown.items()
+    ]
+
+    cmd_total = sum(metrics.slash_command_breakdown.values()) or 1
+    commands = [
+        {"name": name, "count": count, "pct": round(100 * count / cmd_total)}
+        for name, count in metrics.slash_command_breakdown.items()
     ]
 
     judge_scores = []
@@ -86,6 +94,7 @@ def build_context(
         "key_metrics": key_metrics,
         "badges": badges,
         "tools": tools,
+        "commands": commands,
         "judge": judge,
         "judge_scores": judge_scores,
         "replay": replay,
@@ -129,6 +138,11 @@ def to_markdown(context: dict[str, Any]) -> str:
             lines.append(f"- {b.emoji} **{b.name}** — {b.description} ({b.citation})")
     else:
         lines.append("- (none triggered)")
+
+    if m.slash_command_breakdown:
+        lines += ["", "## Slash commands"]
+        for name, count in m.slash_command_breakdown.items():
+            lines.append(f"- `{name}` ×{count}")
 
     judge: JudgeResult | None = context.get("judge")
     if judge and not judge.error:

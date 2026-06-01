@@ -25,11 +25,14 @@ python -m claude_score interview start "Jane Doe" --problem .\path\to\problem
 
 `--problem` can be a directory, a single file, or a `.zip` archive — its contents are copied into the candidate folder and committed as the starting state.
 
+**Secrets get forwarded automatically.** If the problem ships an `.env.example` (MovieDeck does, declaring `TMDB_API_KEY`), `interview start` reads every key listed there from your environment and writes them into the candidate's `.env`. The candidate never sees the values, never has to sign up for anything, and your `.env` is gitignored so the secret doesn't end up in their commit history.
+
 You'll see something like:
 
 ```
 ✓ Candidate folder created at C:\Users\Operator\interviews\jane-doe
   problem seeded from .\path\to\problem
+  forwarded into .env: TMDB_API_KEY
 
 Next steps:
   1. cd "C:\Users\Operator\interviews\jane-doe"

@@ -149,6 +149,17 @@ def cmd_interview_start(args: argparse.Namespace) -> int:
     _emit(f"\n✓ Candidate folder created at {candidate_dir}")
     if problem:
         _emit(f"  problem seeded from {problem}")
+
+    # Report any env vars forwarded from the operator's environment into the
+    # candidate's .env so the operator can confirm before handing off.
+    manifest_path = candidate_dir / interview.MANIFEST
+    if manifest_path.exists():
+        import json as _json
+        manifest_data = _json.loads(manifest_path.read_text(encoding="utf-8"))
+        forwarded = manifest_data.get("forwarded_env_keys") or []
+        if forwarded:
+            _emit(f"  forwarded into .env: {', '.join(forwarded)}")
+
     _emit("\nNext steps:")
     _emit(f"  1. cd \"{candidate_dir}\"")
     _emit("  2. claude")

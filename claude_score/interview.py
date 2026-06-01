@@ -26,7 +26,7 @@ import os
 import re
 import shutil
 import subprocess
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -65,6 +65,7 @@ class CandidateManifest:
     started_at: str
     workdir: str
     problem_source: Optional[str] = None
+    forwarded_env_keys: list[str] = field(default_factory=list)
     finished_at: Optional[str] = None
     project_dir: Optional[str] = None
     notes: str = ""
@@ -175,6 +176,53 @@ def preflight() -> list[Issue]:
 # Start: set up a per-candidate working dir
 # ----------------------------------------------------------------------------
 
+_ENV_LINE = re.compile(r"^\s*([A-Z][A-Z0-9_]*)\s*=")
+
+
+def _forward_env_from_example(candidate_dir: Path) -> list[str]:
+    """If the problem ships a ``.env.example``, fill any declared keys from the operator's env.
+
+    For each ``KEY=...`` line found in ``.env.example``, if ``KEY`` is set in
+    ``os.environ`` with a non-empty value, write ``KEY=<value>`` into
+    ``candidate_dir/.env``. Keys not present in the operator's environment are
+    left out (the candidate's app should already handle a missing key
+    gracefully — that's a starter requirement, not an interview surprise).
+
+    Returns the list of keys forwarded, for logging / manifesting.
+    """
+    example = candidate_dir / ".env.example"
+    if not example.is_file():
+        return []
+
+    forwarded: list[tuple[str, str]] = []
+    for line in example.read_text(encoding="utf-8").splitlines():
+        match = _ENV_LINE.match(line)
+        if not match:
+            continue
+        key = match.group(1)
+        value = os.environ.get(key, "").strip()
+        if value:
+            forwarded.append((key, value))
+
+    if forwarded:
+        env_path = candidate_dir / ".env"
+        existing = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+        existing_keys = {
+            m.group(1)
+            for line in existing.splitlines()
+            if (m := _ENV_LINE.match(line))
+        }
+        new_lines = [
+            f"{key}={value}"
+            for key, value in forwarded
+            if key not in existing_keys
+        ]
+        if new_lines:
+            sep = "" if not existing or existing.endswith("\n") else "\n"
+            env_path.write_text(existing + sep + "\n".join(new_lines) + "\n", encoding="utf-8")
+    return [key for key, _ in forwarded]
+
+
 def _seed_problem(candidate_dir: Path, problem: Path) -> str:
     """Copy or extract the problem source into the candidate's working dir."""
     if problem.is_dir():
@@ -210,6 +258,7 @@ def start(
     candidate_dir.mkdir(parents=True, exist_ok=True)
 
     problem_source = _seed_problem(candidate_dir, problem) if problem else None
+    forwarded_env = _forward_env_from_example(candidate_dir)
 
     if _git_available():
         _git(candidate_dir, "init", "-q")
@@ -221,6 +270,7 @@ def start(
         started_at=datetime.now().isoformat(timespec="seconds"),
         workdir=str(candidate_dir.resolve()),
         problem_source=problem_source,
+        forwarded_env_keys=forwarded_env,
     )
     (candidate_dir / MANIFEST).write_text(
         json.dumps(asdict(manifest), indent=2), encoding="utf-8"

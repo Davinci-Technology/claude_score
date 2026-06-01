@@ -116,7 +116,34 @@ if (-not (Test-Path $interviewRoot)) {
     Write-Host "  $interviewRoot already exists ✓" -ForegroundColor Green
 }
 
-Write-Host "`n=== 8. Preflight ===" -ForegroundColor Cyan
+Write-Host "`n=== 8. Problem-specific secrets (TMDB) ===" -ForegroundColor Cyan
+# Why: the MovieDeck problem hits the TMDB API. `interview start` reads
+# TMDB_API_KEY from the operator's environment and forwards it into each
+# candidate's .env, so candidates never see the key. We capture it once here.
+$existingTmdb = [Environment]::GetEnvironmentVariable("TMDB_API_KEY", "User")
+if ($existingTmdb) {
+    Write-Host "  TMDB_API_KEY already set (User scope) ✓" -ForegroundColor Green
+} else {
+    Write-Host "  Paste your TMDB v3 API key, or hit Enter to skip and set it later."
+    Write-Host "  (input is hidden — it goes to a SecureString, not the screen)"
+    $secure = Read-Host "  TMDB_API_KEY" -AsSecureString
+    if ($secure.Length -gt 0) {
+        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+        try {
+            $plain = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+        } finally {
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
+        [Environment]::SetEnvironmentVariable("TMDB_API_KEY", $plain, "User")
+        $env:TMDB_API_KEY = $plain
+        Write-Host "  TMDB_API_KEY stored (User scope)" -ForegroundColor Yellow
+    } else {
+        Write-Host "  skipped. Set it later with:" -ForegroundColor Yellow
+        Write-Host '    [Environment]::SetEnvironmentVariable("TMDB_API_KEY", "<key>", "User")' -ForegroundColor Yellow
+    }
+}
+
+Write-Host "`n=== 9. Preflight ===" -ForegroundColor Cyan
 Push-Location $repoDir
 . .\.venv\Scripts\Activate.ps1
 python -m claude_score interview preflight

@@ -10,6 +10,7 @@ from .badges import AwardedBadge
 from .judge import JudgeResult
 from .metrics import Metrics
 from .models import Session
+from .redact import redact, redact_many
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
@@ -33,12 +34,30 @@ def build_context(
     judge: JudgeResult | None,
     sessions: list[Session],
 ) -> dict[str, Any]:
+    # Redact credentials from any free-form text BEFORE it reaches the HTML.
+    # Prompts and the judge's prose are the two surfaces in the report that
+    # carry verbatim transcript content.
     replay = []
     for session in sessions:
         for p in session.main_prompts():
             ts = p.timestamp.strftime("%H:%M:%S") if p.timestamp else ""
-            text = p.clean_text
+            text = redact(p.clean_text)
             replay.append({"time": ts, "text": text[:1000]})
+
+    safe_judge: JudgeResult | None = judge
+    if judge is not None and not judge.error:
+        safe_judge = JudgeResult(
+            scores=dict(judge.scores),
+            summary=redact(judge.summary),
+            strengths=redact_many(judge.strengths),
+            concerns=redact_many(judge.concerns),
+            suggested_badges=[
+                {**b, "reason": redact(b.get("reason", ""))}
+                for b in judge.suggested_badges
+            ],
+            model=judge.model,
+            error=judge.error,
+        )
 
     key_metrics = [
         ("Sessions", str(metrics.session_count)),
@@ -73,6 +92,7 @@ def build_context(
     ]
 
     judge_scores = []
+    judge = safe_judge  # use the redacted copy from here on
     if judge and judge.scores:
         labels = {
             "prompt_quality": "Prompt quality",

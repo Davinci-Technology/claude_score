@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
-from .models import AssistantTurn, Session, ToolCall, UserPrompt, Usage
+from .models import AssistantTurn, DagNode, Session, SlashCommand, ToolCall, UserPrompt, Usage
 
 # Wrapper blocks that Claude Code injects into the human prompt stream but that
 # the candidate did not actually type. Stripped before text/tone analysis.
@@ -35,6 +35,24 @@ _NOISE_PATTERNS = [
     re.compile(r"<local-command-stdout>.*?</local-command-stdout>", re.DOTALL),
     re.compile(r"<command-stdout>.*?</command-stdout>", re.DOTALL),
 ]
+
+# Slash commands / skills the human invoked. Claude Code records the command
+# name in this tag inside the user stream; we capture it before _NOISE_PATTERNS
+# strips it so the invocation is counted rather than silently dropped.
+_COMMAND_NAME = re.compile(r"<command-name>\s*(.*?)\s*</command-name>", re.DOTALL)
+
+
+def _command_names(raw: str) -> list[str]:
+    """Pull normalised slash-command names (leading slash, no args) from a raw
+    user message. Returns ``[]`` for ordinary prompts."""
+    names: list[str] = []
+    for hit in _COMMAND_NAME.findall(raw):
+        # The tag may carry args ("/foo bar"); keep just the command token.
+        token = hit.strip().split()[0] if hit.strip() else ""
+        name = "/" + token.lstrip("/")
+        if name != "/":
+            names.append(name)
+    return names
 
 
 def _parse_ts(value: Any) -> datetime | None:
@@ -69,11 +87,31 @@ def _is_tool_result(content: Any) -> bool:
     )
 
 
+def _node_kind(entry: dict[str, Any]) -> str:
+    """Classify a transcript entry for the conversation DAG (rewind detection)."""
+    etype = entry.get("type")
+    if etype == "assistant":
+        return "assistant"
+    if etype == "user":
+        if entry.get("isMeta"):
+            return "other"
+        content = (entry.get("message") or {}).get("content")
+        if _is_tool_result(content):
+            return "tool_result"
+        if isinstance(content, str) and content.strip():
+            return "human"
+        if isinstance(content, list) and _extract_text_blocks(content):
+            return "human"
+        return "other"
+    return "other"
+
+
 def parse_file(path: str | Path) -> Session:
     """Parse a single ``*.jsonl`` transcript file into a :class:`Session`."""
     path = Path(path)
     session = Session(file_path=str(path))
     timestamps: list[datetime] = []
+    node_order = 0
 
     with path.open("r", encoding="utf-8") as fh:
         for line in fh:
@@ -91,6 +129,17 @@ def parse_file(path: str | Path) -> Session:
             ts = _parse_ts(entry.get("timestamp"))
             if ts:
                 timestamps.append(ts)
+
+            uuid = entry.get("uuid")
+            if uuid:
+                node_order += 1
+                session.dag_nodes.append(DagNode(
+                    uuid=uuid,
+                    parent_uuid=entry.get("parentUuid"),
+                    kind=_node_kind(entry),
+                    is_sidechain=bool(entry.get("isSidechain")),
+                    order=node_order,
+                ))
 
             etype = entry.get("type")
             if etype == "user":
@@ -137,9 +186,15 @@ def _handle_user(session: Session, entry: dict[str, Any], ts: datetime | None) -
     else:
         return
 
+    for name in _command_names(raw):
+        session.slash_commands.append(
+            SlashCommand(name=name, timestamp=ts, is_sidechain=is_sidechain)
+        )
+
     clean = _clean(raw)
     if not clean:
-        # Pure noise (e.g. a bare system reminder) — not a real prompt.
+        # Pure noise (e.g. a bare system reminder or a slash command with no
+        # typed text) — not a real prompt. The command, if any, is recorded above.
         return
 
     session.user_prompts.append(

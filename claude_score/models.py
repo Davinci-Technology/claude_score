@@ -89,6 +89,36 @@ class UserPrompt:
 
 
 @dataclass
+class SlashCommand:
+    """A slash command the human invoked (e.g. ``/clear``, ``/compact``, a
+    custom command or skill). Recorded separately from prompts: Claude Code
+    injects these into the user stream wrapped in ``<command-name>`` tags, and
+    they are stripped from prompt text before tone/quality analysis."""
+
+    name: str  # normalised with a leading slash, args excluded
+    timestamp: Optional[datetime] = None
+    is_sidechain: bool = False
+
+
+@dataclass
+class DagNode:
+    """A node in the conversation tree, used to detect rewinds.
+
+    Claude Code transcripts are append-only: a rewind keeps the abandoned
+    messages and appends a new branch, so the ``parentUuid``/``uuid`` graph
+    becomes a tree. A human prompt that ends up on a branch which is *not* an
+    ancestor of the session's final message was rewound away. We keep every
+    node (including tool results) so the ancestor walk is accurate.
+    """
+
+    uuid: str
+    parent_uuid: Optional[str] = None
+    kind: str = "other"  # 'human' | 'assistant' | 'tool_result' | 'other'
+    is_sidechain: bool = False
+    order: int = 0  # append order within the file (the last one is the leaf)
+
+
+@dataclass
 class AssistantTurn:
     """One assistant message: its text, tool calls, thinking flag and usage."""
 
@@ -113,6 +143,8 @@ class Session:
 
     user_prompts: list[UserPrompt] = field(default_factory=list)
     assistant_turns: list[AssistantTurn] = field(default_factory=list)
+    slash_commands: list[SlashCommand] = field(default_factory=list)
+    dag_nodes: list[DagNode] = field(default_factory=list)
     tool_result_count: int = 0
     summaries: list[str] = field(default_factory=list)
 
@@ -125,6 +157,54 @@ class Session:
 
     def main_turns(self) -> list[AssistantTurn]:
         return [t for t in self.assistant_turns if not t.is_sidechain]
+
+    def main_slash_commands(self) -> list[SlashCommand]:
+        """Slash commands in the primary conversation (excludes subagents)."""
+        return [c for c in self.slash_commands if not c.is_sidechain]
+
+    def rewind_stats(self) -> tuple[int, int]:
+        """Best-effort ``(rewind_count, rewound_prompt_count)`` from the DAG.
+
+        A *rewound prompt* is a human prompt on a branch that is not an ancestor
+        of the session's final (leaf) message — i.e. the candidate typed it, then
+        rewound past it. A *rewind* is a distinct point they rewound back to
+        (several discarded prompts off the same point count as one rewind).
+
+        This is immune to tool-call fan-out: tool results and assistant
+        continuations create same-parent siblings too, but they are never human
+        prompts, so they cannot be mistaken for a rewind. There is no explicit
+        rewind marker in the transcript, so this is heuristic; known Claude Code
+        bugs around compaction/resume can corrupt the tree and skew it.
+        """
+        nodes = {n.uuid: n for n in self.dag_nodes if n.uuid and not n.is_sidechain}
+        if not nodes:
+            return (0, 0)
+
+        # The active leaf is the last-appended node (append-only file).
+        leaf = max(nodes.values(), key=lambda n: n.order)
+        surviving: set[str] = set()
+        cur: Optional[str] = leaf.uuid
+        while cur and cur in nodes and cur not in surviving:
+            surviving.add(cur)
+            cur = nodes[cur].parent_uuid
+
+        rewound = [
+            n for n in nodes.values()
+            if n.kind == "human" and n.uuid not in surviving
+        ]
+        if not rewound:
+            return (0, 0)
+
+        # Group discarded prompts by the surviving node they branched from.
+        divergence: set[str] = set()
+        for n in rewound:
+            p = n.parent_uuid
+            guard: set[str] = set()
+            while p and p in nodes and p not in surviving and p not in guard:
+                guard.add(p)
+                p = nodes[p].parent_uuid
+            divergence.add(p or "<root>")
+        return (len(divergence), len(rewound))
 
     def all_tool_calls(self) -> list[ToolCall]:
         calls: list[ToolCall] = []

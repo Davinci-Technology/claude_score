@@ -54,8 +54,58 @@ def test_start_seeds_problem_files(tmp_path: Path):
     assert (candidate_dir / "task.py").exists()
 
 
+def test_start_forwards_env_from_example(tmp_path: Path, monkeypatch):
+    """When the problem declares vars via .env.example, fill them from operator env."""
+    problem = tmp_path / "problem"
+    problem.mkdir()
+    (problem / ".env.example").write_text(
+        "# comments are ignored\n"
+        "TMDB_API_KEY=\n"
+        "GOOGLE_OAUTH_CLIENT_ID=\n"
+        "NOT_IN_OPERATOR_ENV=\n",
+        encoding="utf-8",
+    )
+    (problem / "README.md").write_text("...", encoding="utf-8")
+
+    monkeypatch.setenv("TMDB_API_KEY", "the-tmdb-secret")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "the-client-id")
+    monkeypatch.delenv("NOT_IN_OPERATOR_ENV", raising=False)
+
+    candidate_dir = interview.start(
+        "Pat", problem=problem, root=tmp_path / "interviews"
+    )
+
+    env_path = candidate_dir / ".env"
+    assert env_path.exists()
+    env_text = env_path.read_text(encoding="utf-8")
+    assert "TMDB_API_KEY=the-tmdb-secret" in env_text
+    assert "GOOGLE_OAUTH_CLIENT_ID=the-client-id" in env_text
+    assert "NOT_IN_OPERATOR_ENV" not in env_text
+
+    manifest = json.loads((candidate_dir / interview.MANIFEST).read_text("utf-8"))
+    assert set(manifest["forwarded_env_keys"]) == {
+        "TMDB_API_KEY",
+        "GOOGLE_OAUTH_CLIENT_ID",
+    }
+
+
+def test_start_skips_env_forwarding_when_no_example(tmp_path: Path, monkeypatch):
+    problem = tmp_path / "problem"
+    problem.mkdir()
+    (problem / "README.md").write_text("...", encoding="utf-8")
+    monkeypatch.setenv("TMDB_API_KEY", "should-not-be-forwarded")
+
+    candidate_dir = interview.start(
+        "Lee", problem=problem, root=tmp_path / "interviews"
+    )
+
+    assert not (candidate_dir / ".env").exists()
+    manifest = json.loads((candidate_dir / interview.MANIFEST).read_text("utf-8"))
+    assert manifest["forwarded_env_keys"] == []
+
+
 def _synthetic_transcript(cwd: Path) -> str:
-    """Minimal valid JSONL that ``_find_project_for_cwd`` will match on."""
+    """Minimal valid JSONL that ``_transcripts_under_cwd`` will match on."""
     cwd_str = str(cwd).replace("\\", "\\\\")
     return "\n".join([
         json.dumps({
@@ -111,6 +161,43 @@ def test_finish_end_to_end(tmp_path: Path, monkeypatch):
     if shutil.which("git"):
         assert (sealed / "solution.patch").exists()
         assert (sealed / "git.log").exists()
+
+
+def test_finish_aggregates_sessions_from_subdirectories(tmp_path: Path, monkeypatch):
+    """Sessions started from a subfolder of the candidate dir land in a separate
+    project dir; finish should still gather them as the same candidate."""
+    fake_home = tmp_path / "home"
+    (fake_home / "projects").mkdir(parents=True)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(fake_home))
+
+    root = tmp_path / "interviews"
+    candidate_dir = interview.start("Dana Kim", root=root)
+
+    # Session 1: ran in the candidate folder itself.
+    top = fake_home / "projects" / "proj-top"
+    top.mkdir(parents=True)
+    (top / "s1.jsonl").write_text(_synthetic_transcript(candidate_dir), encoding="utf-8")
+
+    # Session 2: ran in a subfolder — a different munged project dir.
+    sub = fake_home / "projects" / "proj-sub"
+    sub.mkdir(parents=True)
+    (sub / "s2.jsonl").write_text(
+        _synthetic_transcript(candidate_dir / "backend"), encoding="utf-8"
+    )
+
+    # An unrelated session elsewhere on the box must NOT be swept in.
+    other = fake_home / "projects" / "proj-other"
+    other.mkdir(parents=True)
+    (other / "s3.jsonl").write_text(
+        _synthetic_transcript(tmp_path / "somewhere-else"), encoding="utf-8"
+    )
+
+    sealed = interview.finish("Dana Kim", root=root)
+    copied = sorted(p.name for p in (sealed / "transcripts").glob("*.jsonl"))
+    assert copied == ["s1.jsonl", "s2.jsonl"]
+
+    manifest = json.loads((sealed / interview.MANIFEST).read_text("utf-8"))
+    assert len(manifest["project_dirs"]) == 2
 
 
 def test_finish_records_warning_when_no_transcript(tmp_path: Path, monkeypatch):

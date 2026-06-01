@@ -78,6 +78,12 @@ class Metrics:
     tool_breakdown: dict[str, int] = field(default_factory=dict)
     category_breakdown: dict[str, int] = field(default_factory=dict)
 
+    slash_command_count: int = 0
+    slash_command_breakdown: dict[str, int] = field(default_factory=dict)
+
+    rewind_count: int = 0  # distinct points the candidate rewound back to
+    rewound_prompt_count: int = 0  # human prompts discarded by rewinds
+
     polite_hits: int = 0
     terse_hits: int = 0
     profanity_hits: int = 0
@@ -173,6 +179,7 @@ def compute(sessions: list[Session], candidate: str = "unknown") -> Metrics:
     model_counter: Counter[str] = Counter()
     tool_counter: Counter[str] = Counter()
     cat_counter: Counter[str] = Counter()
+    cmd_counter: Counter[str] = Counter()
 
     for session in sessions:
         if session.duration_seconds:
@@ -213,7 +220,16 @@ def compute(sessions: list[Session], candidate: str = "unknown") -> Metrics:
 
         m.tool_result_count += session.tool_result_count
 
+        for cmd in session.main_slash_commands():
+            m.slash_command_count += 1
+            cmd_counter[cmd.name] += 1
+
+        rewinds, rewound_prompts = session.rewind_stats()
+        m.rewind_count += rewinds
+        m.rewound_prompt_count += rewound_prompts
+
     m.models_used = dict(model_counter)
     m.tool_breakdown = dict(tool_counter.most_common())
     m.category_breakdown = dict(cat_counter)
+    m.slash_command_breakdown = dict(cmd_counter.most_common())
     return m

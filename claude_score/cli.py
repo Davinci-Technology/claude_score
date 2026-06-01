@@ -93,6 +93,10 @@ def _print_summary(candidate, metrics, badges, judge_result) -> None:
     _emit(f"  cache reuse     {metrics.cache_hit_ratio:.0%}")
     _emit(f"  avg prompt      {metrics.mean_prompt_words:.0f} words")
     _emit(f"  corrections     {metrics.correction_rate:.0%} of prompts")
+    if metrics.rewind_count or metrics.slash_command_count:
+        _emit(f"  rewinds         {metrics.rewind_count}  "
+              f"({metrics.rewound_prompt_count} prompt(s) redone)")
+        _emit(f"  slash commands  {metrics.slash_command_count}")
     _emit(f"  politeness      {metrics.politeness_score:+.2f}")
     if metrics.tool_breakdown:
         top = ", ".join(f"{n}×{c}" for n, c in list(metrics.tool_breakdown.items())[:5])
@@ -145,6 +149,17 @@ def cmd_interview_start(args: argparse.Namespace) -> int:
     _emit(f"\n✓ Candidate folder created at {candidate_dir}")
     if problem:
         _emit(f"  problem seeded from {problem}")
+
+    # Report any env vars forwarded from the operator's environment into the
+    # candidate's .env so the operator can confirm before handing off.
+    manifest_path = candidate_dir / interview.MANIFEST
+    if manifest_path.exists():
+        import json as _json
+        manifest_data = _json.loads(manifest_path.read_text(encoding="utf-8"))
+        forwarded = manifest_data.get("forwarded_env_keys") or []
+        if forwarded:
+            _emit(f"  forwarded into .env: {', '.join(forwarded)}")
+
     _emit("\nNext steps:")
     _emit(f"  1. cd \"{candidate_dir}\"")
     _emit("  2. claude")

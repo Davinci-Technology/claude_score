@@ -26,7 +26,7 @@ import os
 import re
 import shutil
 import subprocess
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -65,6 +65,7 @@ class CandidateManifest:
     started_at: str
     workdir: str
     problem_source: Optional[str] = None
+    forwarded_env_keys: list[str] = field(default_factory=list)
     finished_at: Optional[str] = None
     project_dir: Optional[str] = None
     notes: str = ""
@@ -175,6 +176,53 @@ def preflight() -> list[Issue]:
 # Start: set up a per-candidate working dir
 # ----------------------------------------------------------------------------
 
+_ENV_LINE = re.compile(r"^\s*([A-Z][A-Z0-9_]*)\s*=")
+
+
+def _forward_env_from_example(candidate_dir: Path) -> list[str]:
+    """If the problem ships a ``.env.example``, fill any declared keys from the operator's env.
+
+    For each ``KEY=...`` line found in ``.env.example``, if ``KEY`` is set in
+    ``os.environ`` with a non-empty value, write ``KEY=<value>`` into
+    ``candidate_dir/.env``. Keys not present in the operator's environment are
+    left out (the candidate's app should already handle a missing key
+    gracefully — that's a starter requirement, not an interview surprise).
+
+    Returns the list of keys forwarded, for logging / manifesting.
+    """
+    example = candidate_dir / ".env.example"
+    if not example.is_file():
+        return []
+
+    forwarded: list[tuple[str, str]] = []
+    for line in example.read_text(encoding="utf-8").splitlines():
+        match = _ENV_LINE.match(line)
+        if not match:
+            continue
+        key = match.group(1)
+        value = os.environ.get(key, "").strip()
+        if value:
+            forwarded.append((key, value))
+
+    if forwarded:
+        env_path = candidate_dir / ".env"
+        existing = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+        existing_keys = {
+            m.group(1)
+            for line in existing.splitlines()
+            if (m := _ENV_LINE.match(line))
+        }
+        new_lines = [
+            f"{key}={value}"
+            for key, value in forwarded
+            if key not in existing_keys
+        ]
+        if new_lines:
+            sep = "" if not existing or existing.endswith("\n") else "\n"
+            env_path.write_text(existing + sep + "\n".join(new_lines) + "\n", encoding="utf-8")
+    return [key for key, _ in forwarded]
+
+
 def _seed_problem(candidate_dir: Path, problem: Path) -> str:
     """Copy or extract the problem source into the candidate's working dir."""
     if problem.is_dir():
@@ -210,6 +258,7 @@ def start(
     candidate_dir.mkdir(parents=True, exist_ok=True)
 
     problem_source = _seed_problem(candidate_dir, problem) if problem else None
+    forwarded_env = _forward_env_from_example(candidate_dir)
 
     if _git_available():
         _git(candidate_dir, "init", "-q")
@@ -221,6 +270,7 @@ def start(
         started_at=datetime.now().isoformat(timespec="seconds"),
         workdir=str(candidate_dir.resolve()),
         problem_source=problem_source,
+        forwarded_env_keys=forwarded_env,
     )
     (candidate_dir / MANIFEST).write_text(
         json.dumps(asdict(manifest), indent=2), encoding="utf-8"
@@ -232,46 +282,62 @@ def start(
 # Finish: seal everything into an evidence bundle
 # ----------------------------------------------------------------------------
 
-def _find_project_for_cwd(target_cwd: Path) -> Optional[Path]:
-    """Find the ~/.claude/projects/... folder whose sessions ran in target_cwd.
+def _first_cwd(jsonl: Path) -> Optional[str]:
+    """Read the ``cwd`` recorded on the first event of a transcript that has one.
 
-    We don't try to reverse Claude Code's CWD munging — we just read the
-    ``cwd`` field on the first event of each transcript and compare paths.
+    A munged project dir corresponds to a single working directory, so the
+    first event carrying a ``cwd`` identifies where the whole session ran.
+    """
+    try:
+        with jsonl.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                cwd = entry.get("cwd")
+                if cwd:
+                    return cwd
+    except OSError:
+        return None
+    return None
+
+
+def _is_within(cwd: str, base: Path) -> bool:
+    """True if ``cwd`` is ``base`` itself or a directory nested inside it."""
+    try:
+        Path(cwd).resolve().relative_to(base)
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def _transcripts_under_cwd(target_cwd: Path) -> list[Path]:
+    """Every transcript whose session ran in target_cwd *or a subdirectory of it*.
+
+    We don't try to reverse Claude Code's CWD munging — we read the ``cwd`` field
+    off each transcript and keep the ones nested under the candidate folder. This
+    catches sessions a candidate started from a subfolder (e.g. ``.../backend``),
+    which land in a separate project dir, so the whole folder aggregates as one
+    candidate.
     """
     target = target_cwd.resolve()
     projects = discovery.projects_root()
     if not projects.is_dir():
-        return None
+        return []
 
-    best: tuple[float, Path] | None = None
-    for project_dir in projects.iterdir():
+    hits: list[Path] = []
+    for project_dir in sorted(projects.iterdir()):
         if not project_dir.is_dir():
             continue
-        for jsonl in project_dir.glob("*.jsonl"):
-            try:
-                with jsonl.open("r", encoding="utf-8") as fh:
-                    for line in fh:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            entry = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        cwd = entry.get("cwd")
-                        if not cwd:
-                            continue
-                        try:
-                            if Path(cwd).resolve() == target:
-                                mtime = jsonl.stat().st_mtime
-                                if best is None or mtime > best[0]:
-                                    best = (mtime, project_dir)
-                        except OSError:
-                            pass
-                        break  # one cwd check per file is enough
-            except OSError:
-                continue
-    return best[1] if best else None
+        for jsonl in sorted(project_dir.glob("*.jsonl")):
+            cwd = _first_cwd(jsonl)
+            if cwd and _is_within(cwd, target):
+                hits.append(jsonl)
+    return hits
 
 
 def finish(
@@ -298,23 +364,35 @@ def finish(
         log = _git(candidate_dir, "log", "--oneline")
         (candidate_dir / "git.log").write_text(log.stdout, encoding="utf-8")
 
-    # 2. Locate and copy in the candidate's transcripts.
-    project_dir = _find_project_for_cwd(candidate_dir)
+    # 2. Locate and copy in the candidate's transcripts. Every session that ran
+    #    inside the candidate folder (or any subfolder) is gathered here, even
+    #    across multiple project dirs, so the whole folder aggregates as one
+    #    candidate.
+    transcripts = _transcripts_under_cwd(candidate_dir)
     transcript_copy = candidate_dir / "transcripts"
     transcript_copy.mkdir(exist_ok=True)
-    if project_dir is None:
+    if not transcripts:
         # Don't fail outright — record it on the manifest and let the
         # interviewer investigate. The scorecard will simply be empty.
         manifest["project_dir"] = None
         manifest["transcript_warning"] = (
             f"No transcript folder under {discovery.projects_root()} matched "
-            f"cwd={candidate_dir.resolve()}. Did the candidate run `claude` "
-            f"inside the candidate folder?"
+            f"cwd={candidate_dir.resolve()} or any subfolder. Did the candidate "
+            f"run `claude` inside the candidate folder?"
         )
     else:
-        for jsonl in project_dir.glob("*.jsonl"):
-            shutil.copy2(jsonl, transcript_copy / jsonl.name)
-        manifest["project_dir"] = str(project_dir)
+        project_dirs: list[str] = []
+        for jsonl in transcripts:
+            dest = transcript_copy / jsonl.name
+            if dest.exists():
+                # Same session-id filename from two project dirs — disambiguate.
+                dest = transcript_copy / f"{jsonl.parent.name}__{jsonl.name}"
+            shutil.copy2(jsonl, dest)
+            if str(jsonl.parent) not in project_dirs:
+                project_dirs.append(str(jsonl.parent))
+        # Keep the singular field for back-compat; list them all alongside it.
+        manifest["project_dir"] = project_dirs[0]
+        manifest["project_dirs"] = project_dirs
 
     # 3. Analyse and write the scorecard.
     sessions = parse_target(transcript_copy) if any(transcript_copy.iterdir()) else []

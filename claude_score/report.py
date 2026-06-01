@@ -10,6 +10,7 @@ from .badges import AwardedBadge
 from .judge import JudgeResult
 from .metrics import Metrics
 from .models import Session
+from .redact import redact, redact_many
 
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 
@@ -33,18 +34,38 @@ def build_context(
     judge: JudgeResult | None,
     sessions: list[Session],
 ) -> dict[str, Any]:
+    # Redact credentials from any free-form text BEFORE it reaches the HTML.
+    # Prompts and the judge's prose are the two surfaces in the report that
+    # carry verbatim transcript content.
     replay = []
     for session in sessions:
         for p in session.main_prompts():
             ts = p.timestamp.strftime("%H:%M:%S") if p.timestamp else ""
-            text = p.clean_text
+            text = redact(p.clean_text)
             replay.append({"time": ts, "text": text[:1000]})
+
+    safe_judge: JudgeResult | None = judge
+    if judge is not None and not judge.error:
+        safe_judge = JudgeResult(
+            scores=dict(judge.scores),
+            summary=redact(judge.summary),
+            strengths=redact_many(judge.strengths),
+            concerns=redact_many(judge.concerns),
+            suggested_badges=[
+                {**b, "reason": redact(b.get("reason", ""))}
+                for b in judge.suggested_badges
+            ],
+            model=judge.model,
+            error=judge.error,
+        )
 
     key_metrics = [
         ("Sessions", str(metrics.session_count)),
         ("Prompts", str(metrics.prompt_count)),
         ("Assistant turns", str(metrics.assistant_turn_count)),
         ("Tool calls", str(metrics.tool_call_count)),
+        ("Slash commands", str(metrics.slash_command_count)),
+        ("Rewinds", str(metrics.rewind_count)),
         ("Work tokens", f"{metrics.work_tokens:,}"),
         ("Output tokens", f"{metrics.usage.output_tokens:,}"),
         ("Est. cost (USD)", f"${metrics.estimated_cost_usd:.2f}"),
@@ -64,7 +85,14 @@ def build_context(
         for name, count in metrics.tool_breakdown.items()
     ]
 
+    cmd_total = sum(metrics.slash_command_breakdown.values()) or 1
+    commands = [
+        {"name": name, "count": count, "pct": round(100 * count / cmd_total)}
+        for name, count in metrics.slash_command_breakdown.items()
+    ]
+
     judge_scores = []
+    judge = safe_judge  # use the redacted copy from here on
     if judge and judge.scores:
         labels = {
             "prompt_quality": "Prompt quality",
@@ -86,6 +114,7 @@ def build_context(
         "key_metrics": key_metrics,
         "badges": badges,
         "tools": tools,
+        "commands": commands,
         "judge": judge,
         "judge_scores": judge_scores,
         "replay": replay,
@@ -129,6 +158,11 @@ def to_markdown(context: dict[str, Any]) -> str:
             lines.append(f"- {b.emoji} **{b.name}** — {b.description} ({b.citation})")
     else:
         lines.append("- (none triggered)")
+
+    if m.slash_command_breakdown:
+        lines += ["", "## Slash commands"]
+        for name, count in m.slash_command_breakdown.items():
+            lines.append(f"- `{name}` ×{count}")
 
     judge: JudgeResult | None = context.get("judge")
     if judge and not judge.error:

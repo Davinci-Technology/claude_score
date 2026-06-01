@@ -77,11 +77,13 @@ the menu earns full marks. A candidate can clear the cap by going deep on
 fewer features (full credit on stretch + solid foundation) just as easily as
 by going broad.
 
-**Hard gate: the app must run at submission time.** If the final commit
-doesn't boot — `python manage.py runserver` errors, `npm run dev` errors,
-the page is white — **no progress points are awarded**, regardless of how
-much code was written. A candidate who can't keep their build green spent
-their time poorly.
+**Hard gate: the app must run at submission time.** If the candidate's
+final state doesn't boot — `python manage.py runserver` errors, `npm run
+dev` errors, the page is white — **no progress points are awarded**,
+regardless of how much code was written. (The harness automatically
+commits the final state on `interview finish`, so this is judged from
+that state — candidates aren't expected to commit anything themselves.)
+A candidate who can't keep their build green spent their time poorly.
 
 **Crediting a feature.** A feature counts when it works end-to-end in the
 running app, not when it's "mostly there." Partial credit on a single

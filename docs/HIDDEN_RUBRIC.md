@@ -34,7 +34,6 @@ score.
 | No input validation on the create endpoint | −1 |
 | Catching exceptions and swallowing them silently | −1 |
 | Direct DOM manipulation in React (`innerHTML`, `document.querySelector` for state) | −1 |
-| Commits that don't compile / leave the project broken | −1 each |
 
 ### Bonuses — things a senior notices and appreciates
 
@@ -43,7 +42,6 @@ score.
 | Sensible error responses (useful messages, problem-details shape) | +1 |
 | Proper HTTP status codes throughout | +1 |
 | Idempotent endpoints where appropriate | +1 |
-| Incremental commit shape (each commit compiles, no giant blobs) | +1 |
 | Frontend accessibility basics (alt text, semantic HTML, keyboard nav) | +1 |
 | A useful `NOTES.md` (decisions, trade-offs, what they'd do next) | +1 |
 
@@ -119,3 +117,7 @@ or by skimming the transcript directly for borderline candidates. Cap at
   with judgement, not people who guess our preferences.
 - **Tone.** Already a reported-but-not-scored field on the rubric — keep
   it that way here too.
+- **Git discipline.** Candidates are explicitly told they don't have to
+  commit anything (the harness auto-commits the final state). So don't
+  penalise "no intermediate commits" or reward "frequent commits" — those
+  signals aren't part of this assessment.

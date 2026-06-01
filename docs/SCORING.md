@@ -62,21 +62,36 @@ judge, and note anything extreme in the writeup.
 
 ## 2. Progress — how far they got — 35 pts
 
-The problem ships a **milestone ladder (M0–M5)**. Award points per milestone
-reached, with partial credit. This is the "how far in 2 hours" axis.
+The problem ships a **feature menu** (see `problems/<problem>/README.md`).
+Each feature has a difficulty/points value; the candidate picks which to ship.
+This is the "how far in 2 hours" axis, with multiple paths to the same score.
 
-| Milestone | Pts | Gate |
-|---|---:|---|
-| **M0** Project runs, DB connected, migrations apply | 5 | `must run` |
-| **M1** Core model + CRUD API persists to Postgres | 8 | |
-| **M2** Status workflow + server-side validation | 6 | |
-| **M3** Minimal JS/TS UI talking to the API | 6 | |
-| **M4** Edge cases, error handling, a few tests | 6 | |
-| **M5** One stretch goal (auth / drag-drop / Docker / …) | 4 | |
+**Computing the mark.** Sum the points of features that *actually work
+end-to-end at submission time*, then scale to 35:
 
-Partial credit is fine (e.g. CRUD works but delete is broken → 5/8). If **M0
-doesn't run at all**, cap progress at 5 regardless of code volume — a candidate
-who can't get it running spent the time poorly.
+> `progress_pts = min(35, feature_points_shipped × 35 / menu_total)`
+
+`menu_total` is published per problem (e.g. ~55 for MovieDeck). The cap
+means a candidate doesn't have to do the whole menu — landing ~two-thirds of
+the menu earns full marks. A candidate can clear the cap by going deep on
+fewer features (full credit on stretch + solid foundation) just as easily as
+by going broad.
+
+**Hard gate: the app must run at submission time.** If the final commit
+doesn't boot — `python manage.py runserver` errors, `npm run dev` errors,
+the page is white — **no progress points are awarded**, regardless of how
+much code was written. A candidate who can't keep their build green spent
+their time poorly.
+
+**Crediting a feature.** A feature counts when it works end-to-end in the
+running app, not when it's "mostly there." Partial credit on a single
+feature (e.g. add works, remove is broken) is allowed but should be the
+exception, not the rule — two interviewers agree on the partial value.
+
+**Auto-detection.** ClaudeScore can probe many features automatically (does
+this model exist, does this endpoint respond, does the build pass). The
+auto-detected total is a *suggestion*; the interviewer can override per
+feature in the cohort scoring sheet.
 
 ---
 

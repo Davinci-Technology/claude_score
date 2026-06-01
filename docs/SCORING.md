@@ -71,7 +71,7 @@ end-to-end at submission time*, then scale to 35:
 
 > `progress_pts = min(35, feature_points_shipped × 35 / menu_total)`
 
-`menu_total` is published per problem (e.g. ~55 for MovieDeck). The cap
+`menu_total` is published per problem (e.g. ~53 for MovieDeck). The cap
 means a candidate doesn't have to do the whole menu — landing ~two-thirds of
 the menu earns full marks. A candidate can clear the cap by going deep on
 fewer features (full credit on stretch + solid foundation) just as easily as
@@ -105,6 +105,20 @@ line-audit.** Score 1–5 (→ ×3) on a gut read of:
 - Any glaring correctness or security smell (raw SQL, secrets, no input checks)?
 
 A junior who shipped clean, modest, working code should score well here.
+
+---
+
+## 4. Hidden adjustments — operator only
+
+[`docs/HIDDEN_RUBRIC.md`](HIDDEN_RUBRIC.md) lists operator-only adjustments
+to the Code Review and AI Collaboration components, capped at ±5 each. It
+exists because some signals (TypeScript strict mode, paste-and-disengage,
+N+1 queries, swallowed exceptions) are more valuable when they're organic
+— spelling them out would turn them into a checklist to game.
+
+The hidden rubric **never raises the cap** of the composite mark; it
+nudges within the existing 50 / 35 / 15 weights. Do not share that file
+with candidates.
 
 ---
 

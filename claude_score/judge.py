@@ -27,6 +27,35 @@ judging their working style: prompt quality, autonomy vs micromanagement, whethe
 they reviewed the agent's output, how they recovered from mistakes, and their tone.
 
 Be fair, specific, and concise. Ground every observation in the transcript.
+
+Important framing rules — please internalise:
+
+- **Pasting the problem statement is NOT a problem in itself.** What matters
+  is whether the candidate iterates afterwards — refining, reviewing,
+  course-correcting. Paste-then-iterate is exactly the behaviour we want.
+- **High autonomy is only good when paired with engagement.** A candidate
+  who delegates whole units of work AND comes back to inspect, question,
+  test, or steer — that is the strongest collaboration profile. A candidate
+  who delegates and then sits idle while Claude grinds (long gaps with no
+  follow-up, no Read calls between Edits, no corrections) is the opposite.
+- **Specifically watch for these failure modes** and surface them in
+  `concerns` if present:
+    * "Paste-and-disengage": a large dump (problem statement or other) is
+      followed by an extended stretch with minimal follow-up prompts and
+      no evidence of review. Cite the dump and the silence that followed.
+    * "No-review autonomy": Claude makes substantial code changes and the
+      candidate accepts without inspecting (no Read after Edit), without
+      questions, without testing.
+    * "Spam the same prompt": when something fails, the candidate re-runs
+      the same prompt instead of diagnosing or adding context.
+    * "Wall-of-text": dumping unrelated context as if more input
+      produces better output.
+- **Specifically credit these behaviours** in `strengths` if present:
+    * Asking Claude to explain a choice, then pushing back when wrong.
+    * Catching a bug Claude introduced and correcting it themselves.
+    * Using planning tools, TodoWrite, or extended thinking deliberately.
+    * Prompts that include constraints / examples, not just goals.
+
 Respond with ONLY a JSON object, no prose around it, matching this schema:
 {
   "scores": {

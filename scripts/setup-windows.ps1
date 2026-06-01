@@ -143,7 +143,35 @@ if ($existingTmdb) {
     }
 }
 
-Write-Host "`n=== 9. Preflight ===" -ForegroundColor Cyan
+Write-Host "`n=== 9. Cloning movie_deck (the interview problem) ===" -ForegroundColor Cyan
+$problemDir = Join-Path $codeDir "movie_deck"
+if (Test-Path (Join-Path $problemDir ".git")) {
+    Push-Location $problemDir
+    git pull --ff-only 2>&1 | Out-Null
+    Pop-Location
+    Write-Host "  movie_deck already cloned; pulled latest ✓" -ForegroundColor Green
+} else {
+    git clone https://github.com/Davinci-Technology/movie_deck.git $problemDir
+    Write-Host "  cloned to $problemDir" -ForegroundColor Yellow
+}
+
+Write-Host "`n=== 10. Pre-pulling Docker image (so the first candidate's `docker compose` is instant) ===" -ForegroundColor Cyan
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+    # Only attempt if Docker engine is reachable.
+    $dockerOk = $false
+    try { docker info --format '{{.ServerVersion}}' 2>$null | Out-Null; $dockerOk = $? } catch {}
+    if ($dockerOk) {
+        docker pull postgres:16 | Out-Null
+        Write-Host "  postgres:16 pulled ✓" -ForegroundColor Green
+    } else {
+        Write-Host "  Docker is installed but the engine isn't running." -ForegroundColor Yellow
+        Write-Host "  Start Docker Desktop, then run: docker pull postgres:16" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  Docker not installed. Install Docker Desktop, then run: docker pull postgres:16" -ForegroundColor Yellow
+}
+
+Write-Host "`n=== 11. Preflight ===" -ForegroundColor Cyan
 Push-Location $repoDir
 . .\.venv\Scripts\Activate.ps1
 python -m claude_score interview preflight
@@ -154,4 +182,5 @@ Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Open a FRESH PowerShell so the new CLAUDE_CONFIG_DIR is picked up."
 Write-Host "  2. Run 'claude' and sign in with your Anthropic account. The token lands in"
 Write-Host "     $interviewConfigDir — none of your prior CLI history follows you to this box."
-Write-Host "  3. See docs/INTERVIEW_DAY.md for the per-candidate workflow."
+Write-Host "  3. See docs/OPERATOR_GUIDE.md for the once-per-week + per-candidate workflow."
+Write-Host "  4. See docs/INTERVIEW_DAY.md for the short version of the per-candidate steps."

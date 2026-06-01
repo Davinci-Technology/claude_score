@@ -29,7 +29,8 @@ the work:
 
 - [`CLAUDE.md`](CLAUDE.md) — operator-facing context loaded automatically by Claude Code.
 - [`docs/SETUP.md`](docs/SETUP.md) — first-time setup of the box (Python, Claude Code, ClaudeScore, env lockdown, **isolated `CLAUDE_CONFIG_DIR` so the operator's account history never leaks**).
-- [`docs/INTERVIEW_DAY.md`](docs/INTERVIEW_DAY.md) — per-candidate runbook.
+- [`docs/OPERATOR_GUIDE.md`](docs/OPERATOR_GUIDE.md) — the operator's playbook: once-per-week prep, per-candidate prep, and common mistakes. Read this if you're the developer running the interviews.
+- [`docs/INTERVIEW_DAY.md`](docs/INTERVIEW_DAY.md) — short per-candidate runbook (use after the operator guide is internalised).
 - [`docs/SCORING.md`](docs/SCORING.md) — hiring rubric (AI collaboration + progress + code review → 0–100).
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — common issues + fixes.
 - [`scripts/setup-windows.ps1`](scripts/setup-windows.ps1) — automated Windows setup.

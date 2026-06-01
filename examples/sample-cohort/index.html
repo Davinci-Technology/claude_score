@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ClaudeScore — Sample cohort</title>
+<title>ClaudeScore — Final cohort report</title>
 <style>
   :root {
     --bg: #0f1117; --card: #181b24; --line: #272b36; --txt: #e6e8ee;
     --muted: #9aa3b2; --accent: #6ee7b7; --accent2: #60a5fa; --warn: #f59e0b;
+    --red: #f87171; --green: #6ee7b7;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--txt);
@@ -22,24 +23,69 @@
     padding: 12px 14px; border-radius: 8px; color: var(--muted); font-size: 13px; margin-bottom: 24px; }
   h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted);
     margin: 36px 0 14px; }
-  table { width: 100%; border-collapse: collapse; background: var(--card);
+
+  /* Ranking table */
+  .rank-table { width: 100%; border-collapse: collapse; background: var(--card);
     border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-  th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); }
-  th { background: #11141c; color: var(--muted); font-size: 12px;
+  .rank-table th, .rank-table td { padding: 14px 16px; text-align: left;
+    border-bottom: 1px solid var(--line); vertical-align: top; }
+  .rank-table th { background: #11141c; color: var(--muted); font-size: 12px;
     text-transform: uppercase; letter-spacing: .4px; }
-  tr:last-child td { border-bottom: none; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; }
-  td a { color: var(--accent2); text-decoration: none; font-weight: 600; }
-  td a:hover { text-decoration: underline; }
-  .blurb { color: var(--muted); font-size: 12.5px; max-width: 360px; }
-  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-  .candidate-card { background: var(--card); border: 1px solid var(--line);
-    border-radius: 12px; padding: 16px 18px; margin: 10px 0; }
-  .candidate-card .top { display: flex; align-items: center; gap: 12px; }
-  .candidate-card .name { font-size: 18px; font-weight: 700; }
-  .candidate-card .blurb { color: var(--muted); font-size: 13px; margin: 4px 0 10px; }
+  .rank-table tr:last-child td { border-bottom: none; }
+  .rank-table td.rank { font-size: 22px; font-weight: 700; color: var(--muted); width: 50px; }
+  .rank-table td.composite { font-size: 26px; font-weight: 800; text-align: center; width: 110px;
+    font-variant-numeric: tabular-nums; }
+  .rank-table td.composite .of { font-size: 12px; color: var(--muted); font-weight: 400; }
+  .rank-table .name a { color: var(--accent2); text-decoration: none; font-weight: 700; font-size: 17px; }
+  .rank-table .name a:hover { text-decoration: underline; }
+  .rank-table .summary { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .band { display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; }
+  .band-strong { background: rgba(110, 231, 183, .15); color: var(--green); border: 1px solid var(--green); }
+  .band-hire { background: rgba(96, 165, 250, .15); color: var(--accent2); border: 1px solid var(--accent2); }
+  .band-borderline { background: rgba(245, 158, 11, .15); color: var(--warn); border: 1px solid var(--warn); }
+  .band-no { background: rgba(248, 113, 113, .15); color: var(--red); border: 1px solid var(--red); }
+
+  /* Component breakdown */
+  .breakdown { display: grid; grid-template-columns: 180px 1fr 70px; gap: 8px 14px;
+    align-items: center; margin: 6px 0; }
+  .breakdown .n { color: var(--muted); font-size: 13px; }
+  .breakdown .num { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 13px; }
+  .stack { display: flex; height: 10px; background: #11141c; border-radius: 6px; overflow: hidden; }
+  .stack .seg-c { background: linear-gradient(90deg, var(--accent2), #4f8cf7); }
+  .stack .seg-p { background: linear-gradient(90deg, var(--accent), #4adb98); }
+  .stack .seg-r { background: linear-gradient(90deg, var(--warn), #e8910b); }
+  .legend { display: flex; gap: 18px; margin: 4px 0 18px; font-size: 12px; color: var(--muted); }
+  .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  .legend .d-c { background: var(--accent2); }
+  .legend .d-p { background: var(--accent); }
+  .legend .d-r { background: var(--warn); }
+
+  /* Candidate detail cards */
+  .candidate { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 22px; margin: 14px 0; }
+  .candidate .top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    margin-bottom: 6px; }
+  .candidate .name { font-size: 19px; font-weight: 700; }
+  .candidate .one { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .candidate ul { margin: 6px 0; padding-left: 18px; font-size: 14px; }
+  .candidate ul li { margin: 4px 0; }
+  .candidate .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 16px; }
+  .candidate h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin: 14px 0 6px; }
   .pill { display: inline-block; background: #11141c; border: 1px solid var(--line);
     border-radius: 999px; padding: 3px 10px; font-size: 12px; color: var(--txt); }
+  .adj-pos { color: var(--green); font-weight: 700; }
+  .adj-neg { color: var(--red); font-weight: 700; }
+
+  /* Metrics evidence table at the bottom */
+  .metrics-table { width: 100%; border-collapse: collapse; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .metrics-table th, .metrics-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  .metrics-table th { background: #11141c; color: var(--muted); font-size: 12px;
+    text-transform: uppercase; letter-spacing: .4px; text-align: left; }
+  .metrics-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .metrics-table tr:last-child td { border-bottom: none; }
+
   footer { margin-top: 40px; color: var(--muted); font-size: 12px;
     border-top: 1px solid var(--line); padding-top: 16px; }
 </style>
@@ -48,20 +94,53 @@
 <div class="wrap">
   <header>
     <div class="brand">◍ ClaudeScore</div>
-    <h1>Sample cohort report</h1>
-    <div class="sub">Three candidates, one week of interviews, one comparison page.</div>
+    <h1>Final cohort report</h1>
+    <div class="sub">3 candidates · MovieDeck (TMDB) · 2-hour live build per candidate</div>
   </header>
 
   <div class="note">
-    <strong>Note:</strong> this is a demonstration of what an end-of-week
-    cohort report looks like. The candidate names are fictional; the
-    underlying session data is real Claude Code transcripts from prior project
-    work on this box. Metric shapes, badge logic, and the comparison layout
-    are exactly what a real interview week would produce.
+    <strong>Sample report.</strong> The candidate names are fictional; the
+    underlying session data is real Claude Code transcripts from prior
+    project work on this box. The Progress and Code Review numbers (and
+    the hidden-rubric adjustments) are stubbed plausibly to illustrate the
+    final shape — in a real interview week these are filled in by
+    interviewers per <code>docs/SCORING.md</code> and <code>docs/HIDDEN_RUBRIC.md</code>.
   </div>
 
-  <h2>Comparison at a glance</h2>
-  <table>
+  <h2>Recommendation</h2>
+  <table class="rank-table">
+    <thead>
+      <tr>
+        <th>Rank</th>
+        <th>Candidate</th>
+        <th>Composite</th>
+        <th>Recommendation</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="rank">#1</td><td class="name"><a href="sam-patel.html">Sam Patel</a><div class="summary">Balanced, careful. Caught a real Claude mistake mid-session and fixed it cleanly. Solid all-rounder.</div></td><td class="composite">78<div class="of">/ 100</div></td><td><span class="band band-hire">Hire</span></td></tr>
+      <tr><td class="rank">#2</td><td class="name"><a href="jordan-kim.html">Jordan Kim</a><div class="summary">Focused, deliberate. Smaller scope but the cleanest code in the cohort. Asked good questions throughout.</div></td><td class="composite">78<div class="of">/ 100</div></td><td><span class="band band-hire">Hire</span></td></tr>
+      <tr><td class="rank">#3</td><td class="name"><a href="riley-chen.html">Riley Chen</a><div class="summary">High-volume, high-autonomy. Shipped a lot. Let Claude run on long leashes; sometimes too long.</div></td><td class="composite">72<div class="of">/ 100</div></td><td><span class="band band-hire">Hire</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Component breakdown</h2>
+  <div class="legend">
+    <span><span class="dot d-c"></span>Collaboration (50)</span>
+    <span><span class="dot d-p"></span>Progress (35)</span>
+    <span><span class="dot d-r"></span>Code review (15)</span>
+  </div>
+  <div style="margin: 10px 0;"><div style="margin-bottom: 6px;"><strong>Sam Patel</strong> <span class="sub" style="color:#9aa3b2; font-size:12px;">43/50 collab · 22/35 progress · 13/15 review · <strong style="color:#e6e8ee">78/100</strong></span></div><div class="stack"><div class="seg-c" style="width: 55.1%"></div><div class="seg-p" style="width: 28.2%"></div><div class="seg-r" style="width: 16.7%"></div></div></div>
+<div style="margin: 10px 0;"><div style="margin-bottom: 6px;"><strong>Jordan Kim</strong> <span class="sub" style="color:#9aa3b2; font-size:12px;">47/50 collab · 16/35 progress · 15/15 review · <strong style="color:#e6e8ee">78/100</strong></span></div><div class="stack"><div class="seg-c" style="width: 60.3%"></div><div class="seg-p" style="width: 20.5%"></div><div class="seg-r" style="width: 19.2%"></div></div></div>
+<div style="margin: 10px 0;"><div style="margin-bottom: 6px;"><strong>Riley Chen</strong> <span class="sub" style="color:#9aa3b2; font-size:12px;">36/50 collab · 28/35 progress · 8/15 review · <strong style="color:#e6e8ee">72/100</strong></span></div><div class="stack"><div class="seg-c" style="width: 50.0%"></div><div class="seg-p" style="width: 38.9%"></div><div class="seg-r" style="width: 11.1%"></div></div></div>
+
+  <h2>Per-candidate detail</h2>
+<div class="candidate"><div class="top"><div class="name">Sam Patel <span class="band band-hire" style="font-size:10px; vertical-align: middle;">Hire</span></div><div><a href="sam-patel.html" class="pill">open full scorecard →</a></div></div><div class="one">Balanced, careful. Caught a real Claude mistake mid-session and fixed it cleanly. Solid all-rounder.</div><h3>Panel observations</h3><ul><li>Most balanced collaboration profile of the cohort.</li><li>Mid-volume on features (~35 of 53 menu points) but each is solid; no half-finished work.</li><li>Reasoned out loud with Claude about caching strategy before implementing — that conversation is worth reading in the transcript.</li></ul><h3>Features shipped</h3><div><span class="pill">F1 search</span> <span class="pill">F2 detail</span> <span class="pill">B1 deck save/remove</span> <span class="pill">B2 ratings</span> <span class="pill">B3 slicing</span> <span class="pill">B4 resilient upstream</span> <span class="pill">B5 discoverable API</span> <span class="pill">UI1 list</span> <span class="pill">UI2 controls</span> <span class="pill">UI4 states</span></div><div class="grid"><div><h3>Collaboration adjustments <span class="adj-pos">(+1)</span></h3><ul><li>+1: caught a Claude-introduced bug in the rating endpoint (off-by-one on validation) and corrected it themselves without re-prompting.</li></ul></div><div><h3>Code-review adjustments <span class="adj-pos">(+1)</span></h3><ul><li>+1: thoughtful NOTES.md with trade-offs called out.</li></ul></div></div></div>
+<div class="candidate"><div class="top"><div class="name">Jordan Kim <span class="band band-hire" style="font-size:10px; vertical-align: middle;">Hire</span></div><div><a href="jordan-kim.html" class="pill">open full scorecard →</a></div></div><div class="one">Focused, deliberate. Smaller scope but the cleanest code in the cohort. Asked good questions throughout.</div><h3>Panel observations</h3><ul><li>Fewest features shipped (~25 of 53 menu points) — didn&#x27;t attempt stretch.</li><li>Highest code quality in the cohort: tests, sensible error responses, no `any` in the TypeScript.</li><li>Possibly risk-averse — discuss whether scope or quality is the more useful signal for the role.</li></ul><h3>Features shipped</h3><div><span class="pill">F1 search</span> <span class="pill">F2 detail</span> <span class="pill">B1 deck save/remove</span> <span class="pill">B2 ratings</span> <span class="pill">B6 scaling list</span> <span class="pill">UI1 list</span> <span class="pill">UI4 states</span> <span class="pill">S6 regression-proof</span></div><div class="grid"><div><h3>Collaboration adjustments <span class="adj-pos">(+2)</span></h3><ul><li>+2: pushed back on Claude&#x27;s first schema suggestion, asked it to justify a choice of `IntegerField` over `PositiveSmallIntegerField`. Engaged across the session.</li></ul></div><div><h3>Code-review adjustments <span class="adj-pos">(+1)</span></h3><ul><li>+1: proper HTTP status codes throughout (201 on create, 204 on delete, 422 on validation).</li></ul></div></div></div>
+<div class="candidate"><div class="top"><div class="name">Riley Chen <span class="band band-hire" style="font-size:10px; vertical-align: middle;">Hire</span></div><div><a href="riley-chen.html" class="pill">open full scorecard →</a></div></div><div class="one">High-volume, high-autonomy. Shipped a lot. Let Claude run on long leashes; sometimes too long.</div><h3>Panel observations</h3><ul><li>Most features shipped of the cohort (~45 of 53 menu points).</li><li>Strong autonomy and trust in Claude — but watch the review discipline; let some questionable code through.</li><li>Tone tense in the second hour when tests started failing.</li></ul><h3>Features shipped</h3><div><span class="pill">F1 search</span> <span class="pill">F2 detail</span> <span class="pill">B1 deck save/remove</span> <span class="pill">B2 ratings</span> <span class="pill">B3 slicing</span> <span class="pill">B4 resilient upstream</span> <span class="pill">UI1 list</span> <span class="pill">UI2 controls</span> <span class="pill">UI3 instant feel</span> <span class="pill">UI4 states</span> <span class="pill">S2 recommendations</span></div><div class="grid"><div><h3>Collaboration adjustments <span class="adj-neg">(-2)</span></h3><ul><li>−2: no-review autonomy on the TMDB search component (accepted a 200-line Edit without inspecting).</li></ul></div><div><h3>Code-review adjustments <span class="adj-neg">(-1)</span></h3><ul><li>−1: TypeScript `any` in 6 places across the deck reducer and the API client.</li></ul></div></div></div>
+
+  <h2>Metrics evidence</h2>
+  <table class="metrics-table">
     <thead>
       <tr>
         <th>Candidate</th>
@@ -69,28 +148,21 @@
         <th class="num">Tools / prompt</th>
         <th class="num">Work tokens</th>
         <th class="num">Cache reuse</th>
-        <th class="num">Corrections</th>
         <th class="num">Rewinds</th>
-        <th>Style</th>
       </tr>
     </thead>
     <tbody>
-      <tr><td><a href="riley-chen.html">Riley Chen</a></td><td class="num">584</td><td class="num">6.4</td><td class="num">46,250,034</td><td class="num">98%</td><td class="num">6%</td><td class="num">8</td><td class="blurb">High-volume, high-autonomy. Burned through tokens, let Claude run on long leashes.</td></tr>
-      <tr><td><a href="sam-patel.html">Sam Patel</a></td><td class="num">1050</td><td class="num">5.1</td><td class="num">91,885,926</td><td class="num">96%</td><td class="num">6%</td><td class="num">5</td><td class="blurb">Mid-volume, balanced. Read as much as they wrote.</td></tr>
-      <tr><td><a href="jordan-kim.html">Jordan Kim</a></td><td class="num">189</td><td class="num">6.3</td><td class="num">35,894,873</td><td class="num">97%</td><td class="num">5%</td><td class="num">2</td><td class="blurb">Focused session. Fewer prompts, careful pacing.</td></tr>
+      <tr><td><a href="sam-patel.html" style="color:#60a5fa;text-decoration:none">Sam Patel</a></td><td class="num">1050</td><td class="num">5.1</td><td class="num">91,885,926</td><td class="num">96%</td><td class="num">5</td></tr>
+      <tr><td><a href="jordan-kim.html" style="color:#60a5fa;text-decoration:none">Jordan Kim</a></td><td class="num">189</td><td class="num">6.3</td><td class="num">35,894,873</td><td class="num">97%</td><td class="num">2</td></tr>
+      <tr><td><a href="riley-chen.html" style="color:#60a5fa;text-decoration:none">Riley Chen</a></td><td class="num">584</td><td class="num">6.4</td><td class="num">46,250,034</td><td class="num">98%</td><td class="num">8</td></tr>
     </tbody>
   </table>
 
-  <h2>Per-candidate snapshots</h2>
-<div class="candidate-card"><div class="top"><div class="name">Riley Chen</div><a href="riley-chen.html" class="pill">open full report →</a></div><div class="blurb">High-volume, high-autonomy. Burned through tokens, let Claude run on long leashes.</div><div class="badges"><span class="pill">🐋 The Whale</span> <span class="pill">🎯 One-Shot</span> <span class="pill">🧘 The Trusting</span> <span class="pill">🦉 The Reviewer</span> <span class="pill">🗺️ The Planner</span> </div></div>
-<div class="candidate-card"><div class="top"><div class="name">Sam Patel</div><a href="sam-patel.html" class="pill">open full report →</a></div><div class="blurb">Mid-volume, balanced. Read as much as they wrote.</div><div class="badges"><span class="pill">😤 The Drill Sergeant</span> <span class="pill">🐋 The Whale</span> <span class="pill">🎯 One-Shot</span> <span class="pill">🧘 The Trusting</span> <span class="pill">🦉 The Reviewer</span> </div></div>
-<div class="candidate-card"><div class="top"><div class="name">Jordan Kim</div><a href="jordan-kim.html" class="pill">open full report →</a></div><div class="blurb">Focused session. Fewer prompts, careful pacing.</div><div class="badges"><span class="pill">🐋 The Whale</span> <span class="pill">🎯 One-Shot</span> <span class="pill">🧘 The Trusting</span> <span class="pill">🗺️ The Planner</span> <span class="pill">♻️ The Cache Whisperer</span> </div></div>
-
   <footer>
-    Composite hiring marks (collaboration / progress / code review) are
-    computed on a per-candidate worksheet that combines these automated
-    metrics with the interviewer's progress score and code-review score. See
-    <code>docs/SCORING.md</code> in the ClaudeScore repo for the full rubric.
+    Final mark = collaboration (50, from judge axes) + progress (35, from
+    feature menu) + code review (15, holistic), each adjusted ±5 by the
+    hidden rubric. Bands per <code>docs/SCORING.md</code>: 85+ strong hire,
+    70–84 hire, 55–69 borderline, &lt;55 no hire.
   </footer>
 </div>
 </body>

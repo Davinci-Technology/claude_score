@@ -54,6 +54,84 @@ def test_start_seeds_problem_files(tmp_path: Path):
     assert (candidate_dir / "task.py").exists()
 
 
+def _git(*args: str, cwd: Path) -> None:
+    """Shell out to git in a test, raising if it fails. Used to set up fixtures."""
+    import subprocess
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=T", *args],
+        cwd=str(cwd), check=True, capture_output=True, text=True,
+    )
+
+
+def _make_problem_repo(tmp_path: Path) -> Path:
+    """Build a tiny problem repo to clone in tests."""
+    import shutil as _sh
+    if not _sh.which("git"):
+        import pytest as _pytest
+        _pytest.skip("git not on PATH")
+    repo = tmp_path / "problem-repo"
+    repo.mkdir()
+    (repo / "README.md").write_text("# Problem\n", encoding="utf-8")
+    _git("init", "-q", "-b", "main", cwd=repo)
+    _git("add", "README.md", cwd=repo)
+    _git("commit", "-q", "-m", "init", cwd=repo)
+    return repo
+
+
+def test_start_clones_problem_repo_and_creates_candidate_branch(tmp_path: Path):
+    repo = _make_problem_repo(tmp_path)
+
+    candidate_dir = interview.start(
+        "Jane Doe", problem=repo, root=tmp_path / "interviews"
+    )
+
+    # Clone preserved the boilerplate's history.
+    assert (candidate_dir / ".git").is_dir()
+    assert (candidate_dir / "README.md").read_text("utf-8") == "# Problem\n"
+
+    # Candidate is on a branch named after them.
+    manifest = json.loads((candidate_dir / interview.MANIFEST).read_text("utf-8"))
+    assert manifest["candidate_branch"] == "jane-doe"
+    assert manifest["base_branch"] in {"main", "master"}
+
+    # Origin was removed so the candidate cannot accidentally push.
+    import subprocess
+    remotes = subprocess.run(
+        ["git", "remote"], cwd=candidate_dir, capture_output=True, text=True,
+    )
+    assert remotes.stdout.strip() == ""
+
+
+def test_finish_diffs_against_base_branch_for_multi_commit_candidate(
+    tmp_path: Path, monkeypatch
+):
+    """A candidate making multiple commits gets the full delta in solution.patch."""
+    repo = _make_problem_repo(tmp_path)
+    fake_home = tmp_path / "home"
+    (fake_home / "projects").mkdir(parents=True)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(fake_home))
+
+    candidate_dir = interview.start(
+        "Multi Commit", problem=repo, root=tmp_path / "interviews"
+    )
+
+    # Simulate the candidate making three independent commits on their branch.
+    for n in range(1, 4):
+        (candidate_dir / f"feature_{n}.py").write_text(f"# feature {n}\n", encoding="utf-8")
+        _git("add", f"feature_{n}.py", cwd=candidate_dir)
+        _git("commit", "-q", "-m", f"feat {n}", cwd=candidate_dir)
+
+    interview.finish("Multi Commit", root=tmp_path / "interviews")
+
+    patch = (candidate_dir / "solution.patch").read_text(encoding="utf-8")
+    # All three commits' content should be in the patch — not just the last one.
+    for n in range(1, 4):
+        assert f"feature_{n}.py" in patch, f"feature_{n}.py missing from diff"
+
+    log = (candidate_dir / "git.log").read_text(encoding="utf-8")
+    assert log.count("\n") >= 3  # at least three commits on the branch
+
+
 def test_start_forwards_env_from_example(tmp_path: Path, monkeypatch):
     """When the problem declares vars via .env.example, fill them from operator env."""
     problem = tmp_path / "problem"

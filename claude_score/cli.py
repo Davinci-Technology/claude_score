@@ -159,6 +159,10 @@ def cmd_interview_start(args: argparse.Namespace) -> int:
         forwarded = manifest_data.get("forwarded_env_keys") or []
         if forwarded:
             _emit(f"  forwarded into .env: {', '.join(forwarded)}")
+        branch = manifest_data.get("candidate_branch")
+        if branch:
+            base = manifest_data.get("base_branch", "main")
+            _emit(f"  candidate branch: {branch} (off {base}; origin removed — no accidental push)")
 
     _emit("\nNext steps:")
     _emit(f"  1. cd \"{candidate_dir}\"")

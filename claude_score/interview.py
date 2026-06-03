@@ -66,6 +66,11 @@ class CandidateManifest:
     workdir: str
     problem_source: Optional[str] = None
     forwarded_env_keys: list[str] = field(default_factory=list)
+    # When the problem source is itself a git repo, the harness clones it and
+    # checks the candidate out on a fresh branch named after them; this is
+    # that branch name. None when the problem was a plain directory.
+    candidate_branch: Optional[str] = None
+    base_branch: Optional[str] = None  # branch the candidate branch was cut from
     finished_at: Optional[str] = None
     project_dir: Optional[str] = None
     notes: str = ""
@@ -242,26 +247,91 @@ def _seed_problem(candidate_dir: Path, problem: Path) -> str:
     raise FileNotFoundError(f"Problem source not found: {problem}")
 
 
+def _is_git_repo(path: Path) -> bool:
+    return (path / ".git").exists()
+
+
+def _current_branch(repo: Path) -> Optional[str]:
+    out = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    return out.stdout.strip() or None if out.returncode == 0 else None
+
+
+def _clone_problem(problem: Path, candidate_dir: Path, slug: str) -> tuple[str, str]:
+    """Clone an existing repo into ``candidate_dir`` and cut a fresh candidate branch.
+
+    Returns ``(candidate_branch, base_branch)``. The clone keeps the problem's
+    full history (so candidates see the boilerplate's commits and can rebase /
+    sub-branch normally), but the ``origin`` remote is **removed** — candidates
+    are explicitly told not to push, and we make it impossible for them to do
+    so by accident. The operator re-adds the remote after the interview to
+    push the candidate's branch up.
+    """
+    # candidate_dir must not exist for `git clone <repo> <dest>` to behave well.
+    if candidate_dir.exists() and not any(candidate_dir.iterdir()):
+        candidate_dir.rmdir()
+    subprocess.run(
+        ["git", "clone", "--quiet", str(problem), str(candidate_dir)],
+        check=True, capture_output=True, text=True,
+    )
+    # Note the base branch (whatever HEAD points at after clone — usually 'main').
+    base = _current_branch(candidate_dir) or "main"
+    # No remote pushing during the interview.
+    _git(candidate_dir, "remote", "remove", "origin")
+    # Check the candidate out on a branch named after them.
+    _git(candidate_dir, "checkout", "-q", "-b", slug)
+    return slug, base
+
+
 def start(
     candidate: str,
     problem: Optional[Path] = None,
     root: Path = DEFAULT_ROOT,
     force: bool = False,
 ) -> Path:
-    """Create a candidate working directory, seed the problem, and commit it."""
+    """Create a candidate working directory and seed the problem.
+
+    Two modes depending on what ``problem`` points at:
+
+    * **git repo** — clone the repo, remove ``origin`` (so the candidate
+      cannot push), and check the candidate out on a fresh branch named
+      after them off the repo's default branch. They use git normally
+      (commits, sub-branches) but cannot accidentally push. The operator
+      pushes the candidate's branch after the interview week, with a
+      token, per ``docs/OPERATOR_GUIDE.md``.
+
+    * **plain directory or archive** — copy files in and start a fresh
+      git repo with a single ``interview start`` commit (legacy behaviour;
+      used by tests and by problems that aren't git repos themselves).
+    """
     slug = slugify(candidate)
     candidate_dir = root / slug
     if candidate_dir.exists() and any(candidate_dir.iterdir()) and not force:
         raise FileExistsError(
             f"{candidate_dir} already exists and is non-empty. Use force=True to overwrite."
         )
-    candidate_dir.mkdir(parents=True, exist_ok=True)
 
-    problem_source = _seed_problem(candidate_dir, problem) if problem else None
+    problem_source: Optional[str] = None
+    candidate_branch: Optional[str] = None
+    base_branch: Optional[str] = None
+
+    if problem and Path(problem).is_dir() and _is_git_repo(Path(problem)) and _git_available():
+        # Clone mode.
+        candidate_dir.mkdir(parents=True, exist_ok=True)
+        candidate_branch, base_branch = _clone_problem(Path(problem), candidate_dir, slug)
+        problem_source = str(problem)
+    else:
+        # Copy / legacy mode.
+        candidate_dir.mkdir(parents=True, exist_ok=True)
+        if problem:
+            problem_source = _seed_problem(candidate_dir, Path(problem))
+        if _git_available():
+            _git(candidate_dir, "init", "-q")
+
     forwarded_env = _forward_env_from_example(candidate_dir)
 
-    if _git_available():
-        _git(candidate_dir, "init", "-q")
+    # Only the legacy mode needs an artificial 'interview start' commit; in
+    # clone mode the boilerplate's existing history is the baseline.
+    if _git_available() and base_branch is None:
         _commit_all(candidate_dir, "interview start")
 
     manifest = CandidateManifest(
@@ -271,6 +341,8 @@ def start(
         workdir=str(candidate_dir.resolve()),
         problem_source=problem_source,
         forwarded_env_keys=forwarded_env,
+        candidate_branch=candidate_branch,
+        base_branch=base_branch,
     )
     (candidate_dir / MANIFEST).write_text(
         json.dumps(asdict(manifest), indent=2), encoding="utf-8"
@@ -359,10 +431,29 @@ def finish(
     # 1. Solution capture: final commit + patch + log.
     if _git_available() and (candidate_dir / ".git").is_dir():
         _commit_all(candidate_dir, "interview end")
-        diff = _git(candidate_dir, "diff", "HEAD~1", "HEAD")
+
+        # Pick the base ref to diff against. In clone mode the manifest records
+        # ``base_branch`` (typically 'main'), so we get the full candidate delta
+        # regardless of how many commits they made. In legacy mode there is no
+        # base branch, so fall back to the first commit on HEAD.
+        base_ref = manifest.get("base_branch")
+        if not base_ref:
+            first = _git(candidate_dir, "rev-list", "--max-parents=0", "HEAD")
+            base_ref = first.stdout.strip().splitlines()[0] if first.stdout.strip() else "HEAD"
+
+        diff = _git(candidate_dir, "diff", f"{base_ref}..HEAD")
         (candidate_dir / "solution.patch").write_text(diff.stdout, encoding="utf-8")
-        log = _git(candidate_dir, "log", "--oneline")
+
+        # Show the candidate's commits (every commit they made on their branch
+        # since cutting off the base), plus the branch they ended on.
+        log = _git(candidate_dir, "log", "--oneline", f"{base_ref}..HEAD")
         (candidate_dir / "git.log").write_text(log.stdout, encoding="utf-8")
+        manifest["final_branch"] = _current_branch(candidate_dir)
+        # List every branch they touched, for the operator to know what to push.
+        branches = _git(candidate_dir, "branch", "--format=%(refname:short)")
+        manifest["local_branches"] = [
+            b for b in branches.stdout.splitlines() if b.strip()
+        ]
 
     # 2. Locate and copy in the candidate's transcripts. Every session that ran
     #    inside the candidate folder (or any subfolder) is gathered here, even

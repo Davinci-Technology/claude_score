@@ -134,7 +134,15 @@ You'll see something like:
 ✓ Candidate folder created at C:\Users\Operator\interviews\jane-doe
   problem seeded from C:\Users\Operator\code\movie_deck
   forwarded into .env: TMDB_API_KEY
+  candidate branch: jane-doe (off main; origin removed — no accidental push)
 ```
+
+Because the problem source is itself a git repo, the harness **clones it**
+into the candidate folder, **removes the `origin` remote**, and checks the
+candidate out on a fresh branch named after them off `main`. They can use
+git however they like during the session; they cannot push (and shouldn't
+need to). You push their branch up after the week — see "Pushing branches
+after the week" below.
 
 If you don't see `forwarded into .env: TMDB_API_KEY`, the operator-env key
 didn't propagate — open a fresh PowerShell (env-var changes don't show up
@@ -215,13 +223,59 @@ python -m claude_score interview status             # same, with manifests
 
 The composite hiring mark per `docs/SCORING.md` combines:
 - **AI collaboration (50 pts)** — automatic from each candidate's `report.html`.
-- **Progress (35 pts)** — sum of feature menu points from `movie_deck/README.md` that the candidate actually shipped, scaled.
+- **Progress (35 pts)** — sum of feature points from
+  [`docs/PROBLEMS/moviedeck.md`](PROBLEMS/moviedeck.md) (operator-only menu)
+  that the candidate actually shipped, scaled.
 - **Code review (15 pts)** — your read of `solution.patch` for ~10 min per candidate.
 
+Plus ±5 per component from [`docs/HIDDEN_RUBRIC.md`](HIDDEN_RUBRIC.md).
+
 For now: keep a one-row-per-candidate spreadsheet with those three columns,
-total, and a rank. The cohort comparison view (one HTML page with all
-candidates side-by-side) is on the roadmap; until it ships, the
-spreadsheet is the comparison artifact you'd share with the panel.
+adjustments, total, and a rank. The cohort comparison view
+(`examples/sample-cohort/index.html` is a worked sample) is what you'd
+share with the panel once the spreadsheet is filled in.
+
+---
+
+## Pushing candidates' branches after the week
+
+Each candidate's folder is a clone of `movie_deck` with the work sitting on
+a branch named after them (e.g. `jane-doe`). `origin` was removed at
+`interview start` to make accidental pushes impossible. After the week,
+when you're ready to preserve their branches in the org repo, re-add
+`origin` with a Personal Access Token and push.
+
+**Per candidate:**
+
+```powershell
+$dir  = "$HOME\interviews\jane-doe"
+$slug = "jane-doe"
+$pat  = "$env:GITHUB_PAT"   # PAT with repo write on Davinci-Technology/movie_deck
+
+cd $dir
+git remote add origin "https://$pat@github.com/Davinci-Technology/movie_deck.git"
+git push origin $slug
+git remote remove origin    # security hygiene: don't leave the token sitting in .git/config
+```
+
+**For all candidates in the cohort root** (one loop):
+
+```powershell
+$pat = "$env:GITHUB_PAT"
+Get-ChildItem $HOME\interviews -Directory | ForEach-Object {
+    $dir  = $_.FullName
+    $slug = $_.Name
+    if (-not (Test-Path "$dir\.git")) { return }  # skip archives, etc
+    Push-Location $dir
+    git remote add origin "https://$pat@github.com/Davinci-Technology/movie_deck.git" 2>$null
+    git push origin $slug
+    git remote remove origin
+    Pop-Location
+}
+```
+
+After the loop, every candidate's branch is on the org's movie_deck repo,
+named after them — exactly what you'd review and merge from.
 
 ---
 

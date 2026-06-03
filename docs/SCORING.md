@@ -62,9 +62,12 @@ judge, and note anything extreme in the writeup.
 
 ## 2. Progress — how far they got — 35 pts
 
-The problem ships a **feature menu** (see `problems/<problem>/README.md`).
-Each feature has a difficulty/points value; the candidate picks which to ship.
-This is the "how far in 2 hours" axis, with multiple paths to the same score.
+Each problem has an **operator-only feature menu** with point values, kept
+in `docs/PROBLEMS/<problem>.md` (e.g. [`PROBLEMS/moviedeck.md`](PROBLEMS/moviedeck.md)).
+The candidate-facing repo does **not** show points or implementation hints
+— candidates form their own feature list by reading the problem's prose
+user journeys. This is the "how far in 2 hours" axis, with multiple paths
+to the same score.
 
 **Computing the mark.** Sum the points of features that *actually work
 end-to-end at submission time*, then scale to 35:

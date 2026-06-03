@@ -117,7 +117,3 @@ or by skimming the transcript directly for borderline candidates. Cap at
   with judgement, not people who guess our preferences.
 - **Tone.** Already a reported-but-not-scored field on the rubric — keep
   it that way here too.
-- **Git discipline.** Candidates are explicitly told they don't have to
-  commit anything (the harness auto-commits the final state). So don't
-  penalise "no intermediate commits" or reward "frequent commits" — those
-  signals aren't part of this assessment.

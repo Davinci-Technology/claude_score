@@ -67,8 +67,13 @@ def test_google_api_key():
 
 
 def test_envvar_style_secret():
-    out = redact("TMDB_API_KEY=4e794eeb1724295abe37d6ffcfce86d2")
-    assert "4e794eeb" not in out
+    # Construct a fake hex value at runtime so the file itself doesn't carry a
+    # literal that looks like a real API key. (Earlier versions of this test
+    # used a real-looking key as the sample, which is exactly the failure
+    # mode the redactor exists to prevent.)
+    fake_hex_key = "f" * 32
+    out = redact(f"TMDB_API_KEY={fake_hex_key}")
+    assert fake_hex_key not in out
     assert "TMDB_API_KEY" in out  # we keep the key name visible
     assert "[REDACTED:secret-value]" in out
 

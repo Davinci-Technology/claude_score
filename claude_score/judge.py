@@ -182,14 +182,27 @@ def _extract_json(text: str) -> dict:
         raise
 
 
+def _cap(text: str, limit: int) -> str:
+    """Truncate with a visible marker so the judge knows content was cut."""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"\n\n...[diff truncated at {limit} chars — later files omitted]..."
+
+
 def build_judge_message(
     sessions: list[Session],
     candidate: str = "candidate",
     code_diff: str | None = None,
     smoke_report: str | None = None,
+    max_diff_chars: int = 120_000,
 ) -> str:
     """Assemble the user message the judge scores. Exposed so the same prompt can
-    be reused outside the API path (e.g. an in-session subagent when no key is set)."""
+    be reused outside the API path (e.g. an in-session subagent when no key is set).
+
+    ``max_diff_chars`` is generous by default: a real 2-hour candidate diff often
+    runs past 40-90k chars, and truncating it mid-file silently hides whole files
+    (e.g. views, the frontend) from the product dimensions. Lower it only if you
+    are hitting a model's context limit."""
     transcript = _render_transcript(sessions)
     parts = [
         f"Candidate: {candidate}",
@@ -205,7 +218,7 @@ def build_judge_message(
             "## CODE DIFF vs the provided boilerplate (evidence for the PRODUCT "
             "dimensions — judge ONLY what the candidate added/changed, not the starter)",
             "",
-            code_diff.strip()[:40_000],
+            _cap(code_diff.strip(), max_diff_chars),
         ]
     else:
         parts += [

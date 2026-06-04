@@ -1,12 +1,23 @@
 """Optional LLM 'judge' pass.
 
-Sends a compact, cleaned rendering of the session to Claude and asks for a
-structured assessment of *how the person worked with the agent* — tone, prompt
-quality, autonomy, review discipline, recovery from mistakes — plus a short
-write-up and a few badge suggestions with citations.
+Sends the session transcript (and, when available, the candidate's code diff vs
+the boilerplate plus a smoke-test report) to Claude and asks for a STRICT,
+analytic, multi-dimension assessment across two halves:
+
+* PROCESS (from the transcript): prompt_quality, delegation_control,
+  review_verification, recovery — how skilfully they drove the agent.
+* PRODUCT (from the diff + smoke report): feature_completeness, code_quality,
+  architecture, testing — what they actually built on top of the starter.
+
+Each dimension is scored 1-5 against behavioural anchors (3 = competent, 5 =
+rare), with per-dimension evidence in ``rationale`` and a ``null`` allowed for
+anything that CANNOT_ASSESS. The rubric is deliberately calibrated to spread
+scores and resist grade inflation.
 
 This is optional. If the ``anthropic`` package isn't installed or no API key is
 available, :func:`is_available` returns False and the CLI simply skips it.
+``build_judge_message`` and ``parse_judge_json`` are exposed so the identical
+rubric can be run through an in-session subagent when no API key is configured.
 """
 
 from __future__ import annotations
@@ -20,61 +31,98 @@ from .models import Session
 
 DEFAULT_JUDGE_MODEL = "claude-sonnet-4-6"
 
-_SYSTEM = """You are an expert engineering interviewer evaluating HOW a developer \
-collaborates with an AI coding agent (Claude Code), based on the transcript of \
-their session. You are NOT judging whether the final code is correct — you are \
-judging their working style: prompt quality, autonomy vs micromanagement, whether \
-they reviewed the agent's output, how they recovered from mistakes, and their tone.
+_SYSTEM = """You are a STRICT staff-level engineer scoring a candidate's 2-hour, \
+AI-assisted (Claude Code) coding interview. You judge two things: (A) HOW skilfully \
+they drove the agent, from the session transcript, and (B) WHAT they actually built \
+on top of the provided boilerplate, from the code diff and a smoke-test report.
 
-Be fair, specific, and concise. Ground every observation in the transcript.
+Your job is to DISCRIMINATE, not to be nice. Most attempts have real gaps. Do not
+give everyone 4s and 5s — that makes the score useless. Be blunt, specific, and a
+little ruthless in the prose: name the weaknesses plainly. Never be gratuitously
+mean, but do not soften real problems.
 
-Important framing rules — please internalise:
+=== CALIBRATION (read carefully — anchors are behavioural, not vibes) ===
+For every dimension, 1-5 means:
+  1 = Poor. Clear deficiency a senior would flag immediately.
+  2 = Below bar. Notable gaps; would need rework.
+  3 = COMPETENT. Exactly what a hireable mid-level engineer ships in 2 hours. This
+      is the DEFAULT, not a disappointment.
+  4 = Strong. Clearly above the typical attempt, with specific evidence.
+  5 = Exceptional and RARE. Reserve for genuinely excellent work; cite the precise
+      evidence that earns it. Few real candidates hit 5 on more than a dimension or two.
+Anchor instincts: a normal solid attempt should land mostly on 3 with a couple of
+4s and a couple of 2s. If you find yourself writing 4-5 everywhere, you are
+inflating — re-read for what's missing. "It runs" is a 3, not a 5.
 
-- **Pasting the problem statement is NOT a problem in itself.** What matters
-  is whether the candidate iterates afterwards — refining, reviewing,
-  course-correcting. Paste-then-iterate is exactly the behaviour we want.
-- **High autonomy is only good when paired with engagement.** A candidate
-  who delegates whole units of work AND comes back to inspect, question,
-  test, or steer — that is the strongest collaboration profile. A candidate
-  who delegates and then sits idle while Claude grinds (long gaps with no
-  follow-up, no Read calls between Edits, no corrections) is the opposite.
-- **Specifically watch for these failure modes** and surface them in
-  `concerns` if present:
-    * "Paste-and-disengage": a large dump (problem statement or other) is
-      followed by an extended stretch with minimal follow-up prompts and
-      no evidence of review. Cite the dump and the silence that followed.
-    * "No-review autonomy": Claude makes substantial code changes and the
-      candidate accepts without inspecting (no Read after Edit), without
-      questions, without testing.
-    * "Spam the same prompt": when something fails, the candidate re-runs
-      the same prompt instead of diagnosing or adding context.
-    * "Wall-of-text": dumping unrelated context as if more input
-      produces better output.
-- **Specifically credit these behaviours** in `strengths` if present:
-    * Asking Claude to explain a choice, then pushing back when wrong.
-    * Catching a bug Claude introduced and correcting it themselves.
-    * Using planning tools, TodoWrite, or extended thinking deliberately.
-    * Prompts that include constraints / examples, not just goals.
+=== SCORING DISCIPLINE ===
+- Score each dimension INDEPENDENTLY (no halo: a great communicator can ship weak code).
+- Ground EVERY score in specific evidence (a quoted prompt, a file/symbol from the
+  diff, a smoke-test line). Put that evidence in `rationale`.
+- If you genuinely cannot observe a dimension from the material provided, set its
+  score to null and write "CANNOT_ASSESS: <why>" in its rationale. NEVER guess upward.
 
-Respond with ONLY a JSON object, no prose around it, matching this schema:
+=== DIMENSION A — PROCESS (judge from the TRANSCRIPT) ===
+- prompt_quality: clarity, context, decomposition, constraints/examples (not just
+  goals). 5 = consistently sharp, well-scoped prompts that set role/constraints.
+  2 = vague one-liners expecting mind-reading.
+- delegation_control: SELECTIVE delegation while retaining control is the goal.
+  5 = delegates whole units AND directs/steers, keeps the wheel. Penalise BOTH
+  extremes: blind full-automation (accepts everything, "vibe coding") AND
+  micromanaging every keystroke. Paste-then-iterate is GOOD; paste-and-disengage is bad.
+- review_verification: did they review the agent's diffs and independently confirm it
+  works — reading changes, questioning choices, running it, writing/checking tests,
+  catching errors? 5 = actively reviews and verifies, catches issues. 1-2 = accepts
+  output unread, never runs/tests it.
+- recovery: when something broke, did they diagnose and add context, or spam the same
+  prompt / flail? If nothing broke, CANNOT_ASSESS rather than a free 5.
+
+=== DIMENSION B — PRODUCT (judge from the DIFF + SMOKE REPORT; judge ONLY what they
+added on top of boilerplate, NOT the starter we gave them) ===
+- feature_completeness: how much of the intended feature set actually WORKS end-to-end
+  (lean on the smoke report). 5 = the core journey works plus polish; 3 = core CRUD
+  works; 1-2 = scaffolding only / doesn't run. "Code exists" without evidence it runs
+  is NOT completeness.
+- code_quality: readability/naming, error handling, input validation, type safety,
+  secrets handling, no SQL/secret leaks, DRY without OVER-ENGINEERING. Over-engineering
+  (needless generality/abstraction for a 2-hour task) is a DEFECT — dock for it.
+  Anchor the top to net code-health a senior would happily inherit, not perfection.
+- architecture: separation of concerns and layout. Reward business logic kept OUT of
+  views and model.save() (e.g. a services/selectors layer), clear API/serializer
+  boundaries, sensible file/folder structure, a coherent frontend split
+  (api-client / hooks / components / types). Score the PRINCIPLE, not a specific
+  file-naming convention — do not penalise defensible alternatives.
+- testing: tests judged by QUALITY not presence. 5 = meaningful tests that would fail
+  if the code broke, at the right level (unit/integration), covering tricky paths
+  (errors, edge cases). 3 = some real tests. 1-2 = no tests or trivial/always-pass tests.
+
+Respond with ONLY a JSON object, no prose around it, matching this schema (use null for
+any score you CANNOT_ASSESS):
 {
   "scores": {
-    "prompt_quality": 1-5,
-    "autonomy": 1-5,
-    "review_discipline": 1-5,
-    "recovery": 1-5,
-    "tone": 1-5
+    "prompt_quality": 1-5 | null,
+    "delegation_control": 1-5 | null,
+    "review_verification": 1-5 | null,
+    "recovery": 1-5 | null,
+    "feature_completeness": 1-5 | null,
+    "code_quality": 1-5 | null,
+    "architecture": 1-5 | null,
+    "testing": 1-5 | null
   },
-  "summary": "2-4 sentence overall read of their collaboration style",
-  "strengths": ["..."],
-  "concerns": ["..."],
-  "suggested_badges": [{"emoji": "🎯", "name": "...", "reason": "one line, cite the transcript"}]
+  "rationale": {"<each dimension above>": "one line citing specific evidence, or CANNOT_ASSESS: why"},
+  "overall": 1-5,
+  "recommendation": "strong_hire | hire | lean_no_hire | no_hire",
+  "summary": "3-5 sentences, blunt and specific: what they did well and where they fell short",
+  "strengths": ["specific, evidence-cited"],
+  "concerns": ["specific, evidence-cited — do not pad; real issues only"]
 }"""
 
 
 @dataclass
 class JudgeResult:
     scores: dict[str, float] = field(default_factory=dict)
+    rationale: dict[str, str] = field(default_factory=dict)
+    overall: float | None = None
+    recommendation: str = ""
     summary: str = ""
     strengths: list[str] = field(default_factory=list)
     concerns: list[str] = field(default_factory=list)
@@ -134,10 +182,76 @@ def _extract_json(text: str) -> dict:
         raise
 
 
+def build_judge_message(
+    sessions: list[Session],
+    candidate: str = "candidate",
+    code_diff: str | None = None,
+    smoke_report: str | None = None,
+) -> str:
+    """Assemble the user message the judge scores. Exposed so the same prompt can
+    be reused outside the API path (e.g. an in-session subagent when no key is set)."""
+    transcript = _render_transcript(sessions)
+    parts = [
+        f"Candidate: {candidate}",
+        "",
+        "## SESSION TRANSCRIPT (evidence for the PROCESS dimensions)",
+        "Human prompts (USER) interleaved with a summary of Claude's actions (CLAUDE):",
+        "",
+        transcript,
+    ]
+    if code_diff and code_diff.strip():
+        parts += [
+            "",
+            "## CODE DIFF vs the provided boilerplate (evidence for the PRODUCT "
+            "dimensions — judge ONLY what the candidate added/changed, not the starter)",
+            "",
+            code_diff.strip()[:40_000],
+        ]
+    else:
+        parts += [
+            "",
+            "## CODE DIFF: not provided. Score feature_completeness, code_quality, "
+            "architecture, and testing as null/CANNOT_ASSESS unless clearly inferable "
+            "from the transcript.",
+        ]
+    if smoke_report and smoke_report.strip():
+        parts += [
+            "",
+            "## SMOKE-TEST REPORT (objective evidence: does it build / migrate / "
+            "test / run?)",
+            "",
+            smoke_report.strip()[:8_000],
+        ]
+    return "\n".join(parts)
+
+
+def parse_judge_json(data: dict, model: str = "") -> JudgeResult:
+    """Build a JudgeResult from the judge's JSON (shared by API + subagent paths)."""
+    raw_scores = data.get("scores") or {}
+    scores = {
+        k: float(v) for k, v in raw_scores.items()
+        if isinstance(v, (int, float))
+    }
+    overall = data.get("overall")
+    return JudgeResult(
+        scores=scores,
+        rationale={k: str(v) for k, v in (data.get("rationale") or {}).items()},
+        overall=float(overall) if isinstance(overall, (int, float)) else None,
+        recommendation=str(data.get("recommendation", "")),
+        summary=str(data.get("summary", "")),
+        strengths=list(data.get("strengths", []) or []),
+        concerns=list(data.get("concerns", []) or []),
+        suggested_badges=list(data.get("suggested_badges", []) or []),
+        model=model,
+    )
+
+
 def judge_candidate(
     sessions: list[Session],
     candidate: str = "candidate",
     model: str = DEFAULT_JUDGE_MODEL,
+    code_diff: str | None = None,
+    smoke_report: str | None = None,
 ) -> JudgeResult:
     if not is_available():
         return JudgeResult(
@@ -145,20 +259,15 @@ def judge_candidate(
         )
     import anthropic
 
-    transcript = _render_transcript(sessions)
-    if not transcript.strip():
+    if not _render_transcript(sessions).strip():
         return JudgeResult(error="No human prompts found to judge.")
 
+    user_msg = build_judge_message(sessions, candidate, code_diff, smoke_report)
     client = anthropic.Anthropic()
-    user_msg = (
-        f"Candidate: {candidate}\n\n"
-        f"Session transcript (human prompts and a summary of Claude's actions):\n\n"
-        f"{transcript}"
-    )
     try:
         resp = client.messages.create(
             model=model,
-            max_tokens=1500,
+            max_tokens=2000,
             system=_SYSTEM,
             messages=[{"role": "user", "content": user_msg}],
         )
@@ -167,11 +276,4 @@ def judge_candidate(
     except Exception as exc:  # network, parse, auth — report, don't crash.
         return JudgeResult(error=f"Judge call failed: {exc}", model=model)
 
-    return JudgeResult(
-        scores={k: float(v) for k, v in (data.get("scores") or {}).items()},
-        summary=str(data.get("summary", "")),
-        strengths=list(data.get("strengths", []) or []),
-        concerns=list(data.get("concerns", []) or []),
-        suggested_badges=list(data.get("suggested_badges", []) or []),
-        model=model,
-    )
+    return parse_judge_json(data, model=model)

@@ -31,6 +31,17 @@ def _emit(msg: str = "") -> None:
     print(msg)
 
 
+def _read_optional(path: str | None) -> str | None:
+    """Read a file for the judge (code diff / smoke report); tolerate a missing path."""
+    if not path:
+        return None
+    try:
+        return Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        _emit(f"  (could not read {path}: {exc})")
+        return None
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     projects = discovery.list_projects()
     if not projects:
@@ -64,7 +75,12 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     judge_result = None
     if args.judge:
         _emit("Running LLM judge pass ...")
-        judge_result = judge_candidate(sessions, candidate=candidate, model=args.model)
+        code_diff = _read_optional(args.diff)
+        smoke_report = _read_optional(args.smoke)
+        judge_result = judge_candidate(
+            sessions, candidate=candidate, model=args.model,
+            code_diff=code_diff, smoke_report=smoke_report,
+        )
         if judge_result.error:
             _emit(f"  (judge: {judge_result.error})")
 
@@ -232,6 +248,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_an.add_argument("--md", help="write a Markdown summary to this path")
     p_an.add_argument("--judge", action="store_true", help="run the optional LLM judge pass")
     p_an.add_argument("--model", default=DEFAULT_JUDGE_MODEL, help="model for the judge pass")
+    p_an.add_argument("--diff", help="path to the candidate's code diff vs boilerplate "
+                      "(e.g. `git diff main..<branch>`), fed to the judge for the product dimensions")
+    p_an.add_argument("--smoke", help="path to a smoke-test report (build/migrate/test output), "
+                      "fed to the judge as objective evidence")
     p_an.add_argument("--no-badges", action="store_true", help="skip trait badges")
     p_an.set_defaults(func=cmd_analyze)
 

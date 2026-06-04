@@ -33,16 +33,16 @@ needs a different balance.
 This is the heart of it. Source is the **ClaudeScore LLM judge** (1–5 on each
 axis) plus a few deterministic metrics as corroboration.
 
-**Scored axes (from the judge):** average these four, each 1–5 → scale to 50.
+**Scored PROCESS axes (from the judge):** average these four, each 1–5 → scale to 50.
 
 | Axis | What a 5 looks like | What a 1–2 looks like |
 |---|---|---|
 | **Prompt quality** | Clear goals, useful context, good constraints; breaks work down | Vague one-liners, no context, expects mind-reading |
-| **Autonomy** | Delegates whole units of work, lets Claude run, steps in when needed | Either micromanages every keystroke OR blindly accepts everything |
-| **Review discipline** | Reads diffs, asks Claude to justify, catches mistakes before they compound | Never inspects output; ships whatever appears |
+| **Delegation & control** | Delegates whole units AND keeps the wheel — directs, steers, retains control | Either micromanages every keystroke OR blindly accepts everything ("vibe coding") |
+| **Review & verification** | Reads diffs, questions choices, runs it / checks tests, catches mistakes | Never inspects output; never confirms it works |
 | **Recovery** | Debugs methodically, re-scopes when stuck, uses errors as signal | Spirals, repeats the same failing prompt, gives up |
 
-> `process_pts = (prompt_quality + autonomy + review_discipline + recovery) / 20 × 50`
+> `process_pts = (prompt_quality + delegation_control + review_verification + recovery) / 20 × 50`
 
 **Tone is reported but NOT scored for hire.** Politeness is a culture
 data-point, not a competence signal — don't let it move the mark.
@@ -57,6 +57,33 @@ judge, and note anything extreme in the writeup.
 - `rewinds` → course-correction. A few rewinds is healthy iteration (they
   noticed a wrong turn and backed out). Many rewinds with little progress can
   signal thrashing — read it together with the progress score, not alone.
+
+### 1b. The judge now also scores the PRODUCT (what they built)
+
+The LLM judge is **analytic** (independent 1–5 per dimension) and, when given
+the candidate's diff vs the boilerplate (`solution.patch`) and a smoke-test
+report, also scores four PRODUCT dimensions plus an `overall` (1–5) and a
+`recommendation` (strong_hire / hire / lean_no_hire / no_hire):
+
+| Dimension | Feeds | Note |
+|---|---|---|
+| **Feature completeness** | Component 2 (Progress) | Counts only what *works* (smoke-anchored), judged on the diff, not the boilerplate |
+| **Code quality** | Component 3 (Code review) | Readability, error handling, validation, type safety, secrets, DRY; **over-engineering is a defect** |
+| **Architecture** | Component 3 (Code review) | Business logic out of views/`save()`; clear API/serializer + frontend layering. Scores the *principle*, not a naming convention |
+| **Testing** | Component 3 (Code review) | Tests judged by whether they'd catch a regression, not by mere presence |
+
+These are a **strict, evidence-grounded first pass** at Components 2 and 3 — the
+interviewer still confirms (especially feature credit via the operator menu).
+Treat the judge's product scores as input, not gospel.
+
+**Strict calibration (read this).** The judge is anchored against grade
+inflation: **3 = competent (what a hireable mid-level ships in 2h), 5 = rare and
+must be evidence-earned**, "it runs" is a 3 not a 5, and over-engineering is
+penalised. Each score carries a one-line evidence citation in the report; a
+dimension it can't observe is marked `CANNOT_ASSESS` rather than guessed
+upward. (Design grounded in Google eng-practices code-review standards, the
+HackSoft Django service-layer convention, and BARS / LLM-as-judge calibration
+research — see the judge prompt in `claude_score/judge.py`.)
 
 ---
 

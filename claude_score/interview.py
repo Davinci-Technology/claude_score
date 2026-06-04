@@ -485,15 +485,26 @@ def finish(
         manifest["project_dir"] = project_dirs[0]
         manifest["project_dirs"] = project_dirs
 
-    # 3. Analyse and write the scorecard.
+    # 3. Analyse and write the scorecard. Feed the judge the candidate's diff vs
+    #    the boilerplate (solution.patch) and a smoke-test report if the operator
+    #    dropped one in the candidate folder, so it can score the PRODUCT too.
     sessions = parse_target(transcript_copy) if any(transcript_copy.iterdir()) else []
     metrics = compute(sessions, candidate=manifest["candidate"])
     badges = evaluate_trait_badges(metrics)
-    judge_result = (
-        judge_candidate(sessions, candidate=manifest["candidate"], model=model)
-        if judge and sessions
-        else None
-    )
+    judge_result = None
+    if judge and sessions:
+        patch = candidate_dir / "solution.patch"
+        code_diff = patch.read_text(encoding="utf-8", errors="replace") if patch.exists() else None
+        smoke_file = next(
+            (candidate_dir / n for n in ("smoke.txt", "smoke_report.txt", "smoke.md")
+             if (candidate_dir / n).exists()),
+            None,
+        )
+        smoke_report = smoke_file.read_text(encoding="utf-8", errors="replace") if smoke_file else None
+        judge_result = judge_candidate(
+            sessions, candidate=manifest["candidate"], model=model,
+            code_diff=code_diff, smoke_report=smoke_report,
+        )
     context = build_context(manifest["candidate"], metrics, badges, judge_result, sessions)
     write_html(context, candidate_dir / "report.html")
     (candidate_dir / "report.md").write_text(to_markdown(context), encoding="utf-8")

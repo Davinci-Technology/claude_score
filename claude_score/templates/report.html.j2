@@ -59,15 +59,29 @@
       {% if models %}{{ models.keys() | join(", ") }}{% else %}model unknown{% endif %}</div>
   </header>
 
-  {% if judge_scores %}
-  <h2>Collaboration scores</h2>
+  {% if judge and not judge.error and (judge.overall is not none or judge.recommendation) %}
+  <h2>Assessment</h2>
   <div class="card">
+    <div style="font-size:24px;font-weight:700;">
+      {% if judge.overall is not none %}{{ "%.1f"|format(judge.overall) }}<span style="font-size:15px;color:var(--muted);">/5 overall</span>{% endif %}
+      {% if judge.recommendation %}<span class="pill" style="font-size:13px;vertical-align:middle;">{{ judge.recommendation.replace('_', ' ') }}</span>{% endif %}
+    </div>
+    {% if judge.model %}<div class="note" style="margin-top:6px;">Judged by {{ judge.model }} · strict analytic rubric</div>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if judge_scores %}
+  <h2>Scores</h2>
+  <div class="card">
+    {% set ns = namespace(group='') %}
     {% for s in judge_scores %}
+    {% if s.group and s.group != ns.group %}<div class="note" style="margin:{% if not loop.first %}14{% else %}0{% endif %}px 0 6px;text-transform:uppercase;letter-spacing:.5px;">{{ s.group }}</div>{% set ns.group = s.group %}{% endif %}
     <div class="scorerow">
       <div class="n">{{ s.label }}</div>
       <div class="bar"><span style="width: {{ s.pct }}%"></span></div>
       <div class="num">{{ "%.1f"|format(s.value) }}/5</div>
     </div>
+    {% if s.rationale %}<div class="note" style="margin:-4px 0 8px;">{{ s.rationale }}</div>{% endif %}
     {% endfor %}
   </div>
   {% endif %}

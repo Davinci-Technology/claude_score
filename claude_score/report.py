@@ -48,6 +48,9 @@ def build_context(
     if judge is not None and not judge.error:
         safe_judge = JudgeResult(
             scores=dict(judge.scores),
+            rationale={k: redact(v) for k, v in judge.rationale.items()},
+            overall=judge.overall,
+            recommendation=judge.recommendation,
             summary=redact(judge.summary),
             strengths=redact_many(judge.strengths),
             concerns=redact_many(judge.concerns),
@@ -94,18 +97,26 @@ def build_context(
     judge_scores = []
     judge = safe_judge  # use the redacted copy from here on
     if judge and judge.scores:
-        labels = {
-            "prompt_quality": "Prompt quality",
-            "autonomy": "Autonomy",
-            "review_discipline": "Review discipline",
-            "recovery": "Recovery",
-            "tone": "Tone",
-        }
-        for key, label in labels.items():
+        # (key, label, group) — analytic dimensions, grouped process vs product.
+        dims = [
+            ("prompt_quality", "Prompt quality", "Process — how they drove the agent"),
+            ("delegation_control", "Delegation & control", "Process — how they drove the agent"),
+            ("review_verification", "Review & verification", "Process — how they drove the agent"),
+            ("recovery", "Recovery / debugging", "Process — how they drove the agent"),
+            ("feature_completeness", "Feature completeness", "Product — what they built"),
+            ("code_quality", "Code quality", "Product — what they built"),
+            ("architecture", "Architecture", "Product — what they built"),
+            ("testing", "Testing", "Product — what they built"),
+        ]
+        for key, label, group in dims:
             if key in judge.scores:
-                judge_scores.append(
-                    {"label": label, "value": judge.scores[key], "pct": round(20 * judge.scores[key])}
-                )
+                judge_scores.append({
+                    "label": label,
+                    "group": group,
+                    "value": judge.scores[key],
+                    "pct": round(20 * judge.scores[key]),
+                    "rationale": judge.rationale.get(key, ""),
+                })
 
     return {
         "candidate": candidate,
@@ -166,13 +177,22 @@ def to_markdown(context: dict[str, Any]) -> str:
 
     judge: JudgeResult | None = context.get("judge")
     if judge and not judge.error:
-        lines += ["", "## Judge assessment", "", judge.summary]
-        if judge.scores:
-            lines.append("")
-            lines.append(
-                "Scores: "
-                + ", ".join(f"{k}={v:g}/5" for k, v in judge.scores.items())
-            )
+        lines += ["", "## Judge assessment"]
+        if judge.overall is not None or judge.recommendation:
+            verdict = []
+            if judge.overall is not None:
+                verdict.append(f"**Overall: {judge.overall:g}/5**")
+            if judge.recommendation:
+                verdict.append(f"recommendation: **{judge.recommendation.replace('_', ' ')}**")
+            lines += ["", " · ".join(verdict)]
+        lines += ["", judge.summary]
+        if context.get("judge_scores"):
+            lines += ["", "| Dimension | Score | Why |", "|---|---|---|"]
+            for s in context["judge_scores"]:
+                why = (s.get("rationale") or "").replace("|", "\\|")
+                lines.append(f"| {s['label']} | {s['value']:g}/5 | {why} |")
+        if judge.model:
+            lines += ["", f"_Judged by: {judge.model}_"]
         if judge.strengths:
             lines += ["", "**Strengths**"] + [f"- {s}" for s in judge.strengths]
         if judge.concerns:
